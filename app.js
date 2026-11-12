@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,wallSeen:new Map(),lastBookRenderAt:0};
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,wallSeen:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null};
 const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function model(){
@@ -82,14 +82,123 @@ function renderBook(){
  $('wallSummary').textContent='Visibles ≥1 min: '+persistent.filter(x=>x.side==='Compra').length+' compras / '+persistent.filter(x=>x.side==='Venta').length+' ventas · solo 50 niveles por lado';
  $('walls').innerHTML=levels.slice(0,7).map(x=>'<tr><td class="'+(x.side==='Compra'?'up':'down')+'">'+x.side+'</td><td>'+usd(x.p)+'</td><td>'+usd(x.v)+'</td><td class="'+(x.age>=60000?'up':'')+'">'+wallAge(x.age)+'</td></tr>').join('')||'<tr><td colspan="4">Sin datos</td></tr>'
 }
+
+// Bybit L2 only: observed resting orders. Samples are captured in this browser,
+// never backfilled, and are intentionally capped at 72 x 100 levels for mobile.
+const HEAT_SAMPLE_MS=5000,HEAT_MAX_SAMPLES=72;
+function captureLiquidityHeat(){
+ const now=Date.now();
+ if(document.hidden||now-state.lastBookAt>12000||now-state.lastPriceAt>30000||!state.price)return;
+ const capture=(book)=>[...book].map(([p,q])=>[Number(p),Number(p)*Number(q)]).filter(([price,usdVal])=>price>0&&usdVal>0);
+ state.heatSamples.push({ts:now,price:state.price,bids:capture(state.bids),asks:capture(state.asks)});
+ if(state.heatSamples.length>HEAT_MAX_SAMPLES)state.heatSamples.shift();
+ state.lastHeatAt=now;
+ drawLiquidityHeat()
+}
+function drawLiquidityHeat(){
+ const canvas=$('liquidityHeat');if(!canvas)return;
+ const r=canvas.parentElement.getBoundingClientRect();
+ const dpr=Math.min(window.devicePixelRatio||1,2),w=Math.max(240,r.width),h=Math.max(205,r.height),c=canvas.getContext('2d');
+ canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);c.scale(dpr,dpr);c.fillStyle='#091322';c.fillRect(0,0,w,h);
+ const samples=state.heatSamples,now=Date.now();
+ if(!samples.length){
+  c.fillStyle='#9cb0c8';c.font='12px system-ui';c.fillText('Reuniendo muestras del libro en vivo...',14,h/2);
+  $('liquidityHeatStamp').textContent='Historial disponible solo con la página abierta';return
+ }
+ const reference=state.price,step=reference>=100000?10:5,rows=29,half=(rows-1)/2;
+ const max= Math.round(reference/step)*step+half*step,min=max-(rows-1)*step;
+ const x0=9,y0=15,axisWidth=61,chartWidth=w-axisWidth-x0,colWidth=chartWidth/HEAT_MAX_SAMPLES,chartHeight=h-38,rowHeight=chartHeight/rows;
+ const grid=[];
+ const values=[];
+ for(const snap of samples){
+  const rowData=Array.from({length:rows},()=>[0,0]);
+  for(const [book,side] of [[snap.bids,0],[snap.asks,1]])for(const [price,vol] of book){
+   const row=Math.round((max-price)/step);
+   if(row>=0&&row<rows&&vol>0&&Number.isFinite(vol))rowData[row][side]+=vol;
+  }
+  grid.push(rowData);for(const [b,a] of rowData){if(b>0)values.push(b);if(a>0)values.push(a)}
+ }
+ values.sort((a,b)=>a-b);const scale=Math.max(1,values[Math.floor((values.length-1)*.9)]||1);
+ for(let i=0;i<grid.length;i++){
+  const x=x0+(HEAT_MAX_SAMPLES-grid.length+i)*colWidth;
+  for(let j=0;j<rows;j++){
+   const [buy,sell]=grid[i][j];
+   if(!buy&&!sell)continue;
+   const v=Math.max(buy,sell),opacity=Math.min(.94,.1+.83*Math.sqrt(Math.min(1,v/scale)));
+   c.fillStyle=buy>=sell?'rgba(52,213,161,'+opacity+')':'rgba(250,107,132,'+opacity+')';
+   c.fillRect(x+0.2,y0+j*rowHeight+0.1,Math.max(.5,colWidth-.5),Math.max(.5,rowHeight-.65));
+  }
+ }
+ c.strokeStyle='#26364a';c.lineWidth=.7;c.font='10px system-ui';c.textAlign='right';
+ for(let j=0;j<rows;j+=7){
+  const y=y0+(j+.5)*rowHeight,v=max-j*step;
+  c.beginPath();c.moveTo(x0,y);c.lineTo(w-axisWidth+4,y);c.stroke();
+  c.fillStyle='#93abc5';c.fillText('$'+cash(v),w-3,Math.min(h-24,y+3));
+ }
+ const yPrice=y0+(max-reference)/step*rowHeight+rowHeight/2;
+ if(yPrice>=y0&&yPrice<y0+chartHeight){
+  c.strokeStyle='#62d6ed';c.lineWidth=1.2;c.setLineDash([3,3]);c.beginPath();c.moveTo(x0,yPrice);c.lineTo(w-axisWidth+3,yPrice);c.stroke();c.setLineDash([])
+ }
+ c.font='10px system-ui';c.textAlign='left';c.fillStyle='#9cb0c8';
+ c.fillText(time(samples[0].ts).slice(0,5),x0,h-5);
+ c.textAlign='right';c.fillText(time(samples.at(-1).ts).slice(0,5),w-axisWidth,h-5);
+ $('liquidityHeatStamp').textContent=samples.length+' muestras de 5 s · '+Math.min(6,Math.round((now-samples[0].ts)/6000)/10)+' min registrados · Bybit L2 (50 niveles por lado)';
+ if(now-state.lastHeatAt>15000)$('liquidityHeatStamp').textContent+=' · datos pausados'
+}
+
+// Heuristic, not proof of a passive order or a specific whale: compare aggressor
+// side imbalance against actual price displacement over the same 90-second sample.
+function evaluateAbsorption(now=Date.now()){
+ if(now-state.lastPriceAt>20000||!state.wsOk){
+  $('absorptionStatus').textContent='Datos recientes no disponibles';
+  $('absorptionDetail').textContent='Se requiere conexión activa y operaciones recientes de Bybit';
+  return
+ }
+ let buy=0,sell=0,n=0,first=null,last=null;
+ for(const t of state.trades){
+  if(now-t.ts>90000||t.ts>now+5000)continue;
+  n++;
+  if(t.buy)buy+=t.usdt;else sell+=t.usdt;
+  if(!first||t.ts<first.ts)first=t;
+  if(!last||t.ts>last.ts)last=t
+ }
+ const duration=first&&last?last.ts-first.ts:0,total=buy+sell;
+ if(!first||n<12||duration<25000||total<500000){
+  $('absorptionStatus').textContent='Reuniendo datos (90 s)';
+  $('absorptionDetail').textContent='Se necesitan al menos 25 s observados, 12 operaciones y US$500.000 de volumen agresivo en la ventana';
+  return
+ }
+ const share=Math.max(buy,sell)/total,movePct=(last.price/first.price-1)*100;
+ const enough=share>=.72;
+ const buyAbsorption=enough&&sell>buy&&movePct>=-.035;
+ const sellAbsorption=enough&&buy>sell&&movePct<=.035;
+ const priceStr=(movePct>=0?'+':'')+movePct.toFixed(3)+'%';
+ const sideText=sell>buy?'ventas':'compras';
+ if(buyAbsorption){
+  $('absorptionStatus').textContent='Posible absorción compradora';
+  $('absorptionStatus').className='num up';
+ }else if(sellAbsorption){
+  $('absorptionStatus').textContent='Posible absorción vendedora';
+  $('absorptionStatus').className='num down';
+ }else{
+  $('absorptionStatus').textContent='Sin absorción destacable';
+  $('absorptionStatus').className='num';
+ }
+ $('absorptionDetail').textContent=(100*share).toFixed(0)+'% '+sideText+' agresivas · '+usd(total)+' negociados · BTC '+priceStr+' durante '+Math.round(duration/1000)+' s. '+(buyAbsorption||sellAbsorption?'Desequilibrio sin desplazamiento proporcional. Indicio, no confirmación.':'El flujo no cumple el criterio de absorción.');
+ if(buyAbsorption||sellAbsorption){
+  const label=buyAbsorption?'compradora':'vendedora';
+  alertUser('Posible absorción '+label+': '+(share*100).toFixed(0)+'% '+sideText+' y precio '+priceStr,'absorption-'+label,180000)
+ }
+}
+
 function renderTrades(){let now=Date.now();state.trades=state.trades.filter(t=>now-t.ts<300000);state.whales=state.whales.filter(t=>now-t.ts<300000);let buy=0,sell=0;for(const t of state.trades){if(t.buy)buy+=t.usdt;else sell+=t.usdt}$('buyVol').textContent=usd(buy);$('sellVol').textContent=usd(sell);$('delta').textContent=(buy-sell>=0?'+':'')+usd(buy-sell);const cvd=state.sessionCvd;$('cvd').textContent=(cvd>=0?'+':'')+usd(cvd);$('whales').innerHTML=state.whales.slice(0,5).map(x=>`<div class="alertrow"><span class="${x.buy?'up':'down'}">${x.buy?'COMPRA':'VENTA'}</span> · ${usd(x.usdt)} · ${usd(x.price)} <span class="muted">${time(x.ts)}</span></div>`).join('')||'<div class="empty">No se han observado operaciones por encima del umbral.</div>'}
-function onTrade(d){const entries=Array.isArray(d.data)?d.data:[];for(const x of entries){let p=asNum(x.p),q=asNum(x.v),ts=asNum(x.T)||Date.now(),buy=x.S==='Buy';if(!p||!q)continue;state.lastPrice=state.price;state.price=p;state.lastPriceAt=Date.now();if(!state.priceAtFirst)state.priceAtFirst=p;const t={price:p,usdt:p*q,buy,ts};state.trades.push(t);state.sessionCvd+=(buy?1:-1)*t.usdt;if(t.usdt>=state.threshold){state.whales.unshift(t);state.whales=state.whales.slice(0,20);alertUser(`${buy?'Compra':'Venta'} agresiva grande ${usd(t.usdt)} a ${usd(p)}`,'whale-'+ts+'-'+p,0)}}if(state.trades.length>30000)state.trades=state.trades.slice(-15000);renderPrice();renderTrades();if(Date.now()-(state.lastModelAt||0)>30000){state.lastModelAt=Date.now();model()}}
+function onTrade(d){const entries=Array.isArray(d.data)?d.data:[];for(const x of entries){let p=asNum(x.p),q=asNum(x.v),ts=asNum(x.T)||Date.now(),buy=x.S==='Buy';if(!p||!q)continue;state.lastPrice=state.price;state.price=p;state.lastPriceAt=Date.now();if(!state.priceAtFirst)state.priceAtFirst=p;const t={price:p,usdt:p*q,buy,ts};state.trades.push(t);state.sessionCvd+=(buy?1:-1)*t.usdt;if(t.usdt>=state.threshold){state.whales.unshift(t);state.whales=state.whales.slice(0,20);alertUser(`${buy?'Compra':'Venta'} agresiva grande ${usd(t.usdt)} a ${usd(p)}`,'whale-'+ts+'-'+p,0)}}if(state.trades.length>30000)state.trades=state.trades.slice(-15000);if(Date.now()-(state.lastTradeRenderAt||0)>1000){state.lastTradeRenderAt=Date.now();renderPrice();renderTrades()}if(Date.now()-(state.lastModelAt||0)>30000){state.lastModelAt=Date.now();model()}}
 function onBook(d){
  const a=d.data;
  if(!a||!Array.isArray(a.b)||!Array.isArray(a.a))return;
  const now=Date.now();
  if(d.type==='snapshot'||a.u===1){
-  state.bids.clear();state.asks.clear();state.wallSeen.clear();
+  state.bids.clear();state.asks.clear();state.wallSeen.clear();state.heatSamples=[];state.lastHeatAt=0;drawLiquidityHeat();
  }
  for(const [updates,book,prefix] of [[a.b,state.bids,'B:'],[a.a,state.asks,'A:']]){
   for(const [p,q] of updates){
@@ -104,7 +213,7 @@ function onBook(d){
  if(now-state.lastBookRenderAt>500){state.lastBookRenderAt=now;renderBook()}
 }
 function onLiquidation(d){if(!Array.isArray(d.data))return;for(const l of d.data){let p=asNum(l.p),q=asNum(l.v);if(!p||!q)continue;let side=l.S==='Buy'?'long':'short',v=p*q,ts=asNum(l.T)||Date.now();if(side==='long')state.longLiq+=v;else state.shortLiq+=v;state.liq.unshift({side,price:p,notional:v,ts})}state.liq=state.liq.slice(0,100);state.lastLiqAt=Date.now();renderLiq()}
-function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.50.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);state.bids.clear();state.asks.clear();state.wallSeen.clear();state.lastBookAt=0;renderBook();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
+function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.50.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);state.bids.clear();state.asks.clear();state.wallSeen.clear();state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
 async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
 async function getOi(){// Public sources, no credentials, no simulated fallback.
 const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent='Última lectura '+time(state.lastOiAt)+' · contratos BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}
@@ -173,4 +282,4 @@ async function getHistory(){
 }
 
 function tabs(){for(const b of document.querySelectorAll('[data-tf]'))b.addEventListener('click',()=>{state.tf=b.dataset.tf;document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x===b));getCandles();getOiSeries();model()})}function apply(){let n=Number($('threshold').value),d=Number($('distance').value);if(!Number.isFinite(n)||n<10000||!Number.isFinite(d)||d<.05||d>5){$('error').textContent='Umbral mínimo US$10.000; distancia entre 0,05% y 5%.';return}state.threshold=n;state.distance=d;state.whales=state.whales.filter(x=>x.usdt>=n);renderTrades();$('error').textContent='Configuración guardada en este dispositivo.';try{localStorage.setItem('btc-intelligence-config',JSON.stringify({threshold:n,distance:d}))}catch{}}function restore(){try{let d=JSON.parse(localStorage.getItem('btc-intelligence-config')||'{}');if(d.threshold>=10000)$('threshold').value=d.threshold;if(d.distance>=.05&&d.distance<=5)$('distance').value=d.distance}catch{}apply()}
-function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();getOi();getCandles();getHistory();getOiSeries();setInterval(getOiSeries,60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getOi();getCandles();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();
+function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();getOi();getCandles();getHistory();getOiSeries();setInterval(getOiSeries,60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();evaluateAbsorption(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getOi();getCandles();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();

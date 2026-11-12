@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,wallSeen:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null};
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,wallSeen:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0};
 const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function model(){
@@ -191,6 +191,121 @@ function evaluateAbsorption(now=Date.now()){
  }
 }
 
+
+// Large prints are public tape records, not identified wallets or unique traders.
+// "Sequence" means multiple trades in the same aggressor direction, NOT one whale.
+function renderAdvancedWhales(now=Date.now()){
+ const root=$('largeFlow');
+ if(!root)return;
+ const recent=state.trades.filter(t=>now-t.ts<=90000&&now-t.ts>=0&&t.usdt>=100000).sort((a,b)=>b.ts-a.ts);
+ const bySide=(buy)=>recent.filter(t=>t.buy===buy);
+ const long=bySide(true),short=bySide(false);
+ const sum=x=>x.reduce((a,t)=>a+t.usdt,0);
+ const buyer=sum(long),seller=sum(short);
+ $('largeBuy').textContent=usd(buyer)+' · '+long.length+' ejec.';
+ $('largeSell').textContent=usd(seller)+' · '+short.length+' ejec.';
+ const candidate=(count,value)=>count>=3&&value>=500000;
+ const buySeq=candidate(long.length,buyer),sellSeq=candidate(short.length,seller);
+ if(!state.wsOk||now-state.lastPriceAt>20000){
+  $('largeFlowStatus').textContent='Datos de operaciones no disponibles';
+  root.innerHTML='<div class="empty">Esperando flujo en vivo.</div>';
+  return
+ }
+ $('largeFlowStatus').textContent=buySeq&&sellSeq?'Rachas en ambos lados':buySeq?'Racha compradora detectada':sellSeq?'Racha vendedora detectada':'Sin rachas grandes detectadas';
+ root.innerHTML=recent.slice(0,6).map(t=>'<div class="alertrow"><span class="'+(t.buy?'up':'down')+'">'+(t.buy?'COMPRA':'VENTA')+'</span> · '+usd(t.usdt)+' · '+usd(t.price)+' <span class="muted">'+time(t.ts)+'</span></div>').join('')||'<div class="empty">Sin ejecuciones individuales ≥US$100.000 durante los últimos 90 s.</div>';
+ if((buySeq||sellSeq)&&now-state.lastLargeAlertAt>300000){
+  state.lastLargeAlertAt=now;
+  alertUser('Racha pública de operaciones grandes ('+(buySeq?'compras':'')+(buySeq&&sellSeq?'/':'')+(sellSeq?'ventas':'')+') en 90 s','large-flow',300000)
+ }
+}
+const tfPeriod=()=>({'5':'5min','15':'15min','30':'30min','60':'1h','240':'4h'})[state.tf];
+const finiteNum=v=>v===null||v===undefined||v===''?null:Number.isFinite(Number(v))?Number(v):null;
+async function getFunding(){
+ const now=Date.now();
+ const [current,history]=await Promise.allSettled([
+  req('https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT'),
+  req('https://api.bybit.com/v5/market/funding/history?category=linear&symbol=BTCUSDT&limit=1')
+ ]);
+ if(current.status==='fulfilled'){
+  const d=current.value;
+  const row=d.retCode===0?d.result?.list?.[0]:null;
+  const value=finiteNum(row?.fundingRate),next=finiteNum(row?.nextFundingTime);
+  if(value!==null&&Math.abs(value)<.2&&next&&next>now-3600000){
+   state.fundingRate=value;state.fundingNextAt=next;state.fundingAt=now;
+   $('fundingCurrent').textContent=(value>=0?'+':'')+(value*100).toFixed(4)+'%';
+   $('fundingNext').textContent=time(next)+' · próximo evento';
+  }
+ }
+ if(history.status==='fulfilled'){
+  const d=history.value;
+  const row=d.retCode===0?d.result?.list?.[0]:null;
+  const val=finiteNum(row?.fundingRate),ts=finiteNum(row?.fundingRateTimestamp);
+  if(val!==null&&Math.abs(val)<.2&&ts&&ts<=now+300000){
+   state.lastFundingRate=val;state.lastFundingAt=ts;
+   $('fundingPrevious').textContent=(val>=0?'+':'')+(val*100).toFixed(4)+'% · '+time(ts)
+  }
+ }
+ if(now-state.fundingAt>300000){
+  state.fundingRate=null;
+  $('fundingCurrent').textContent='—';
+  $('fundingNext').textContent='Financiación actual no disponible';
+ }
+ renderMarketSummary()
+}
+async function getAccountRatio(){
+ const tf=state.tf,period=tfPeriod(),request=++state.ratioReq;
+ if(state.ratioTf!==tf){state.ratioTf=tf;state.ratioLong=null;state.ratioShort=null;state.ratioAt=0}
+ try{
+  const d=await req('https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=BTCUSDT&period='+period+'&limit=2');
+  const row=d.retCode===0?d.result?.list?.[0]:null;
+  const l=finiteNum(row?.buyRatio),sh=finiteNum(row?.sellRatio),ts=finiteNum(row?.timestamp);
+  if(l===null||sh===null||l<0||sh<0||Math.abs(l+sh-1)>.03||!ts)throw Error('Datos del ratio inválidos');
+  if(request!==state.ratioReq||tf!==state.tf)return;
+  state.ratioLong=l;state.ratioShort=sh;state.ratioAt=ts;
+  $('accountLong').textContent=(l*100).toFixed(1)+'%';
+  $('accountShort').textContent=(sh*100).toFixed(1)+'%';
+  $('accountRatioStamp').textContent='Cuentas con posiciones · '+period+' · '+time(ts);
+ }catch(e){
+  if(request!==state.ratioReq||tf!==state.tf)return;
+  state.ratioLong=null;state.ratioShort=null;state.ratioAt=0;
+  $('accountLong').textContent='—';$('accountShort').textContent='—';
+  $('accountRatioStamp').textContent='Ratio Bybit no disponible para '+period
+ }
+ renderMarketSummary()
+}
+function renderMarketSummary(now=Date.now()){
+ if(!$('marketSummary'))return;
+ if(!state.wsOk||now-state.lastPriceAt>20000){
+  $('marketSummary').textContent='Esperando operaciones en vivo para describir el mercado.';
+  $('summaryStamp').textContent='Datos insuficientes';
+  return
+ }
+ const recent=state.trades.filter(t=>now-t.ts<300000&&now-t.ts>=0);
+ let buy=0,sell=0;
+ for(const t of recent){if(t.buy)buy+=t.usdt;else sell+=t.usdt}
+ const total=buy+sell,lines=[];
+ if(total>=150000){
+  const buyPercent=100*buy/total;
+  const flow=buyPercent>=60?'predominan compras agresivas':buyPercent<=40?'predominan ventas agresivas':'flujo comprador/vendedor equilibrado';
+  lines.push('Flujo 5m: '+flow+' ('+buyPercent.toFixed(0)+'% compras, '+usd(total)+' negociados).');
+ }else lines.push('Flujo 5m: volumen observado aún insuficiente para clasificar predominio.');
+ if(state.candles.length&&state.price){
+  const open=Number(state.candles[0][1]);
+  if(open>0){const change=(state.price/open-1)*100;lines.push('BTC '+(change>.03?'sube':change<-.03?'baja':'permanece cerca de la apertura')+' en '+tfPeriod()+' ('+(change>=0?'+':'')+change.toFixed(2)+'%).')}
+ }
+ const series=state.oiSeries;
+ if(series.length>=2&&now-state.oiSeriesAt<10*60000){
+  const a=series.at(-1).v,b=series.at(-2).v,chg=(a/b-1)*100;
+  lines.push('OI '+tfPeriod()+': '+(chg>.02?'aumenta':chg<-.02?'disminuye':'varía poco')+' ('+(chg>=0?'+':'')+chg.toFixed(2)+'% entre dos registros).');
+ }else lines.push('OI histórico: sin lectura reciente para esta temporalidad.');
+ if(state.ratioLong!==null&&state.ratioAt>now-Number(state.tf)*60000*3-900000)
+  lines.push('Ratio de cuentas: '+(state.ratioLong*100).toFixed(0)+'% con posiciones long y '+(state.ratioShort*100).toFixed(0)+'% short; no mide su capital.');
+ if(state.fundingRate!==null&&now-state.fundingAt<300000)
+  lines.push('Funding indicado: '+(state.fundingRate>=0?'+':'')+(state.fundingRate*100).toFixed(4)+'% (no es señal direccional).');
+ $('marketSummary').textContent=lines.join(' ');
+ $('summaryStamp').textContent='Último análisis '+time(now)+' · descriptivo, sin señales ni probabilidades';
+}
+
 function renderTrades(){let now=Date.now();state.trades=state.trades.filter(t=>now-t.ts<300000);state.whales=state.whales.filter(t=>now-t.ts<300000);let buy=0,sell=0;for(const t of state.trades){if(t.buy)buy+=t.usdt;else sell+=t.usdt}$('buyVol').textContent=usd(buy);$('sellVol').textContent=usd(sell);$('delta').textContent=(buy-sell>=0?'+':'')+usd(buy-sell);const cvd=state.sessionCvd;$('cvd').textContent=(cvd>=0?'+':'')+usd(cvd);$('whales').innerHTML=state.whales.slice(0,5).map(x=>`<div class="alertrow"><span class="${x.buy?'up':'down'}">${x.buy?'COMPRA':'VENTA'}</span> · ${usd(x.usdt)} · ${usd(x.price)} <span class="muted">${time(x.ts)}</span></div>`).join('')||'<div class="empty">No se han observado operaciones por encima del umbral.</div>'}
 function onTrade(d){const entries=Array.isArray(d.data)?d.data:[];for(const x of entries){let p=asNum(x.p),q=asNum(x.v),ts=asNum(x.T)||Date.now(),buy=x.S==='Buy';if(!p||!q)continue;state.lastPrice=state.price;state.price=p;state.lastPriceAt=Date.now();if(!state.priceAtFirst)state.priceAtFirst=p;const t={price:p,usdt:p*q,buy,ts};state.trades.push(t);state.sessionCvd+=(buy?1:-1)*t.usdt;if(t.usdt>=state.threshold){state.whales.unshift(t);state.whales=state.whales.slice(0,20);alertUser(`${buy?'Compra':'Venta'} agresiva grande ${usd(t.usdt)} a ${usd(p)}`,'whale-'+ts+'-'+p,0)}}if(state.trades.length>30000)state.trades=state.trades.slice(-15000);if(Date.now()-(state.lastTradeRenderAt||0)>1000){state.lastTradeRenderAt=Date.now();renderPrice();renderTrades()}if(Date.now()-(state.lastModelAt||0)>30000){state.lastModelAt=Date.now();model()}}
 function onBook(d){
@@ -281,5 +396,5 @@ async function getHistory(){
  }
 }
 
-function tabs(){for(const b of document.querySelectorAll('[data-tf]'))b.addEventListener('click',()=>{state.tf=b.dataset.tf;document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x===b));getCandles();getOiSeries();model()})}function apply(){let n=Number($('threshold').value),d=Number($('distance').value);if(!Number.isFinite(n)||n<10000||!Number.isFinite(d)||d<.05||d>5){$('error').textContent='Umbral mínimo US$10.000; distancia entre 0,05% y 5%.';return}state.threshold=n;state.distance=d;state.whales=state.whales.filter(x=>x.usdt>=n);renderTrades();$('error').textContent='Configuración guardada en este dispositivo.';try{localStorage.setItem('btc-intelligence-config',JSON.stringify({threshold:n,distance:d}))}catch{}}function restore(){try{let d=JSON.parse(localStorage.getItem('btc-intelligence-config')||'{}');if(d.threshold>=10000)$('threshold').value=d.threshold;if(d.distance>=.05&&d.distance<=5)$('distance').value=d.distance}catch{}apply()}
-function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();getOi();getCandles();getHistory();getOiSeries();setInterval(getOiSeries,60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();evaluateAbsorption(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getOi();getCandles();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();
+function tabs(){for(const b of document.querySelectorAll('[data-tf]'))b.addEventListener('click',()=>{state.tf=b.dataset.tf;document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x===b));getCandles();getOiSeries();getAccountRatio();model();renderMarketSummary()})}function apply(){let n=Number($('threshold').value),d=Number($('distance').value);if(!Number.isFinite(n)||n<10000||!Number.isFinite(d)||d<.05||d>5){$('error').textContent='Umbral mínimo US$10.000; distancia entre 0,05% y 5%.';return}state.threshold=n;state.distance=d;state.whales=state.whales.filter(x=>x.usdt>=n);renderTrades();$('error').textContent='Configuración guardada en este dispositivo.';try{localStorage.setItem('btc-intelligence-config',JSON.stringify({threshold:n,distance:d}))}catch{}}function restore(){try{let d=JSON.parse(localStorage.getItem('btc-intelligence-config')||'{}');if(d.threshold>=10000)$('threshold').value=d.threshold;if(d.distance>=.05&&d.distance<=5)$('distance').value=d.distance}catch{}apply()}
+function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();evaluateAbsorption(now);renderAdvancedWhales(now);renderMarketSummary(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getOi();getCandles();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();

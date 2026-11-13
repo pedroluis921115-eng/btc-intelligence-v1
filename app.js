@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,wallSeen:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0};
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,wallSeen:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallWatch:new Map(),breakouts:[],lastBreakCheckAt:0};
 const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function model(){
@@ -306,19 +306,130 @@ function renderMarketSummary(now=Date.now()){
  $('summaryStamp').textContent='Último análisis '+time(now)+' · descriptivo, sin señales ni probabilidades';
 }
 
+
+// Reading guide: order-book levels are visible aggregate orders, not guaranteed support/resistance.
+const WALL_MIN_USD=180000,WALL_MIN_AGE=12000,WALL_MAX_DIST=.012;
+function rankWallLevels(now=Date.now()){
+ if(!state.price||now-state.lastBookAt>15000)return [];
+ const combined=[...state.bids].map(([p,q])=>({p:+p,v:+p*+q,side:'bid',key:'B:'+p}))
+ .concat([...state.asks].map(([p,q])=>({p:+p,v:+p*+q,side:'ask',key:'A:'+p})));
+ return combined.filter(x=>Number.isFinite(x.v)&&x.v>0&&x.p>0&&Math.abs(x.p/state.price-1)<=WALL_MAX_DIST)
+ .map(x=>({...x,age:now-(state.wallSeen.get(x.key)||now),dist:100*(x.p/state.price-1)}))
+ .sort((a,b)=>Number(b.age>=WALL_MIN_AGE&&b.v>=WALL_MIN_USD)-Number(a.age>=WALL_MIN_AGE&&a.v>=WALL_MIN_USD)||b.v-a.v);
+}
+function recordWallDrop(side,p,oldQty,newQty,age,now){
+ const prev=p*oldQty,next=p*newQty,lost=prev-next,key=(side==='bid'?'B:':'A:')+p;
+ if(prev<250000||lost<200000||lost/prev<.65||age<8000||!state.price||Math.abs(p/state.price-1)>.008)return;
+ if(now-(state.wallDropCooldown.get(key)||0)<45000)return;
+ state.wallDropCooldown.set(key,now);
+ state.wallDrops.unshift({ts:now,side,p,prev,lost,next,status:'pending',matched:0});
+ state.wallDrops=state.wallDrops.slice(0,12)
+}
+function evaluateWallDrops(now=Date.now()){
+ for(const e of state.wallDrops){
+  if(e.status!=='pending'||now-e.ts<3000)continue;
+  let matched=0;
+  for(const t of state.trades){
+   if(Math.abs(t.ts-e.ts)>3500||Math.abs(t.price-e.p)>Math.max(5,e.p*.00012))continue;
+   if(t.buy===(e.side==='ask'))matched+=t.usdt
+  }
+  e.matched=matched;
+  e.status=matched>=Math.min(100000,e.lost*.30)?'coincident':'unconfirmed'
+ }
+}
+function renderWallInsights(now=Date.now()){
+ const bids=$('strongBidLevels'),asks=$('strongAskLevels'),events=$('wallDropEvents');
+ if(!bids||!asks||!events)return;
+ if(now-state.lastBookAt>15000||!state.wsOk){
+  bids.textContent='Libro sin datos recientes';asks.textContent='Libro sin datos recientes';
+  $('wallInsightStamp').textContent='Requiere conexión activa a Bybit L2';return
+ }
+ const levels=rankWallLevels(now);
+ const list=side=>levels.filter(x=>x.side===side).slice(0,3)
+  .map((x,i)=>'<div class="alertrow">'+(i+1)+'. <strong>'+usd(x.p)+'</strong> · '+usd(x.v)+' · '+wallAge(x.age)+' visible · '+Math.abs(x.dist).toFixed(2)+'% del precio · '+(x.age>=WALL_MIN_AGE&&x.v>=WALL_MIN_USD?'VIGILADO':'nuevo/menor')+'</div>').join('')
+  ||'<div class="empty">Sin niveles visibles dentro de ±1,2%.</div>';
+ bids.innerHTML=list('bid');asks.innerHTML=list('ask');
+ $('wallInsightStamp').textContent='Candidatos observados desde que abriste la app · '+time(now);
+ // Arm prior levels; do not infer past crossings from levels first seen after the move.
+ for(const x of levels){
+  if(x.age<WALL_MIN_AGE||x.v<WALL_MIN_USD)continue;
+  const onExpectedSide=x.side==='bid'?state.price>x.p*1.00025:state.price<x.p*.99975;
+  let watch=state.wallWatch.get(x.key);
+  if(!watch){
+   if(!onExpectedSide)continue;
+   watch={key:x.key,side:x.side,level:x.p,seenAt:now,lastSeen:now,armedAt:now,done:false};
+   state.wallWatch.set(x.key,watch)
+  }else watch.lastSeen=now;
+ }
+ for(const [key,watch] of state.wallWatch){
+  if(now-watch.lastSeen>180000||now-watch.seenAt>360000)state.wallWatch.delete(key)
+ }
+ if(state.wallWatch.size>40){
+  const obsolete=[...state.wallWatch.values()].sort((a,b)=>a.lastSeen-b.lastSeen);
+  for(const x of obsolete.slice(0,state.wallWatch.size-40))state.wallWatch.delete(x.key)
+ }
+ evaluateWallDrops(now);
+ events.innerHTML=state.wallDrops.filter(e=>now-e.ts<600000).slice(0,6).map(e=>{
+  let stateText=e.status==='pending'?'Contrastando con ejecuciones…':
+   e.status==='coincident'?'Operaciones agresivas próximas: '+usd(e.matched)+' (coincidencia, no prueba)':
+   'Sin ejecuciones próximas suficientes (cancelación o cambio de profundidad posibles)';
+  return '<div class="alertrow"><span class="'+(e.side==='bid'?'up':'down')+'">'+(e.side==='bid'?'COMPRA':'VENTA')+'</span> '+usd(e.p)+' · liquidez visible reducida '+usd(e.lost)+' · '+time(e.ts)+'<div class="sub">'+stateText+'</div></div>'
+ }).join('')||'<div class="empty">Sin reducciones importantes detectadas en esta sesión.</div>';
+ $('wallLossScope').textContent='Bybit, 50 niveles por lado · cambios observados durante esta sesión';
+}
+function checkBreakouts(now=Date.now()){
+ if(!state.wsOk||now-state.lastPriceAt>18000||!state.price)return;
+ for(const evt of state.breakouts){
+  if(evt.status!=='pending')continue;
+  const elapsed=now-evt.ts;
+  const restored=evt.side==='bid'?state.price>evt.level*1.00035:state.price<evt.level*.99965;
+  const sustained=evt.side==='bid'?state.price<evt.level*.99975:state.price>evt.level*1.00025;
+  if(restored&&elapsed>=8000){evt.status='returned';evt.resolved=now;evt.last=state.price}
+  else if(elapsed>=45000&&sustained){evt.status='sustained';evt.resolved=now;evt.last=state.price}
+  else if(elapsed>=90000){evt.status='uncertain';evt.resolved=now;evt.last=state.price}
+ }
+ for(const watch of state.wallWatch.values()){
+  if(watch.done||now-watch.armedAt<2500||now-watch.lastSeen>150000)continue;
+  const broken=watch.side==='bid'?state.price<watch.level*.99965:state.price>watch.level*1.00035;
+  if(!broken)continue;
+  watch.done=true;
+  if(state.breakouts.some(e=>e.side===watch.side&&Math.abs(e.level-watch.level)<1&&now-e.ts<180000))continue;
+  const evt={ts:now,side:watch.side,level:watch.level,status:'pending',resolved:0,last:state.price};
+  state.breakouts.unshift(evt);state.breakouts=state.breakouts.slice(0,10)
+ }
+}
+function renderBreakouts(now=Date.now()){
+ const el=$('breakoutEvents');if(!el)return;
+ if(!state.wsOk||now-state.lastPriceAt>18000){$('breakoutStamp').textContent='Sin operaciones recientes; detección pausada'}
+ else $('breakoutStamp').textContent='Seguimiento de niveles observados antes del cruce · '+time(now);
+ const names={pending:'Cruce en observación',returned:'Retorno al lado anterior (posible falsa ruptura)',sustained:'Cruce sostenido 45 s',uncertain:'Sin confirmación suficiente'};
+ el.innerHTML=state.breakouts.filter(e=>now-e.ts<600000).slice(0,6).map(e=>
+  '<div class="alertrow"><span class="'+(e.side==='bid'?'down':'up')+'">'+(e.side==='bid'?'Cruce BAJISTA':'Cruce ALCISTA')+'</span> de '+usd(e.level)+' · '+time(e.ts)+'<div class="sub">'+names[e.status]+(e.resolved?' · '+time(e.resolved):'')+'</div></div>'
+ ).join('')||'<div class="empty">No se han registrado cruces de muros previamente observados.</div>'
+}
+function resetWallTracking(){
+ for(const e of state.breakouts)if(e.status==='pending'){e.status='uncertain';e.resolved=Date.now()}
+ state.wallWatch.clear();
+}
+
 function renderTrades(){let now=Date.now();state.trades=state.trades.filter(t=>now-t.ts<300000);state.whales=state.whales.filter(t=>now-t.ts<300000);let buy=0,sell=0;for(const t of state.trades){if(t.buy)buy+=t.usdt;else sell+=t.usdt}$('buyVol').textContent=usd(buy);$('sellVol').textContent=usd(sell);$('delta').textContent=(buy-sell>=0?'+':'')+usd(buy-sell);const cvd=state.sessionCvd;$('cvd').textContent=(cvd>=0?'+':'')+usd(cvd);$('whales').innerHTML=state.whales.slice(0,5).map(x=>`<div class="alertrow"><span class="${x.buy?'up':'down'}">${x.buy?'COMPRA':'VENTA'}</span> · ${usd(x.usdt)} · ${usd(x.price)} <span class="muted">${time(x.ts)}</span></div>`).join('')||'<div class="empty">No se han observado operaciones por encima del umbral.</div>'}
-function onTrade(d){const entries=Array.isArray(d.data)?d.data:[];for(const x of entries){let p=asNum(x.p),q=asNum(x.v),ts=asNum(x.T)||Date.now(),buy=x.S==='Buy';if(!p||!q)continue;state.lastPrice=state.price;state.price=p;state.lastPriceAt=Date.now();if(!state.priceAtFirst)state.priceAtFirst=p;const t={price:p,usdt:p*q,buy,ts};state.trades.push(t);state.sessionCvd+=(buy?1:-1)*t.usdt;if(t.usdt>=state.threshold){state.whales.unshift(t);state.whales=state.whales.slice(0,20);alertUser(`${buy?'Compra':'Venta'} agresiva grande ${usd(t.usdt)} a ${usd(p)}`,'whale-'+ts+'-'+p,0)}}if(state.trades.length>30000)state.trades=state.trades.slice(-15000);if(Date.now()-(state.lastTradeRenderAt||0)>1000){state.lastTradeRenderAt=Date.now();renderPrice();renderTrades()}if(Date.now()-(state.lastModelAt||0)>30000){state.lastModelAt=Date.now();model()}}
+function onTrade(d){const entries=Array.isArray(d.data)?d.data:[];for(const x of entries){let p=asNum(x.p),q=asNum(x.v),ts=asNum(x.T)||Date.now(),buy=x.S==='Buy';if(!p||!q)continue;state.lastPrice=state.price;state.price=p;state.lastPriceAt=Date.now();if(!state.priceAtFirst)state.priceAtFirst=p;const t={price:p,usdt:p*q,buy,ts};state.trades.push(t);state.sessionCvd+=(buy?1:-1)*t.usdt;if(t.usdt>=state.threshold){state.whales.unshift(t);state.whales=state.whales.slice(0,20);alertUser(`${buy?'Compra':'Venta'} agresiva grande ${usd(t.usdt)} a ${usd(p)}`,'whale-'+ts+'-'+p,0)}}if(state.trades.length>30000)state.trades=state.trades.slice(-15000);if(Date.now()-(state.lastTradeRenderAt||0)>1000){state.lastTradeRenderAt=Date.now();renderPrice();renderTrades()}if(Date.now()-state.lastBreakCheckAt>1000){state.lastBreakCheckAt=Date.now();checkBreakouts();renderBreakouts()}if(Date.now()-(state.lastModelAt||0)>30000){state.lastModelAt=Date.now();model()}}
 function onBook(d){
  const a=d.data;
  if(!a||!Array.isArray(a.b)||!Array.isArray(a.a))return;
  const now=Date.now();
  if(d.type==='snapshot'||a.u===1){
+  resetWallTracking();
   state.bids.clear();state.asks.clear();state.wallSeen.clear();state.heatSamples=[];state.lastHeatAt=0;drawLiquidityHeat();
  }
  for(const [updates,book,prefix] of [[a.b,state.bids,'B:'],[a.a,state.asks,'A:']]){
   for(const [p,q] of updates){
    if(!Number.isFinite(+p)||+p<=0||!Number.isFinite(+q))continue;
    const key=prefix+p;
+   if(d.type==='delta'&&a.u!==1&&book.has(p)){
+    const oldQty=+book.get(p),age=now-(state.wallSeen.get(key)||now);
+    if(oldQty>+q)recordWallDrop(prefix==='B:'?'bid':'ask',+p,oldQty,+q,age,now)
+   }
    if(+q<=0){book.delete(p);state.wallSeen.delete(key);continue}
    if(!book.has(p))state.wallSeen.set(key,now);
    book.set(p,q)
@@ -328,7 +439,7 @@ function onBook(d){
  if(now-state.lastBookRenderAt>500){state.lastBookRenderAt=now;renderBook()}
 }
 function onLiquidation(d){if(!Array.isArray(d.data))return;for(const l of d.data){let p=asNum(l.p),q=asNum(l.v);if(!p||!q)continue;let side=l.S==='Buy'?'long':'short',v=p*q,ts=asNum(l.T)||Date.now();if(side==='long')state.longLiq+=v;else state.shortLiq+=v;state.liq.unshift({side,price:p,notional:v,ts})}state.liq=state.liq.slice(0,100);state.lastLiqAt=Date.now();renderLiq()}
-function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.50.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);state.bids.clear();state.asks.clear();state.wallSeen.clear();state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
+function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.50.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
 async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
 async function getOi(){// Public sources, no credentials, no simulated fallback.
 const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent='Última lectura '+time(state.lastOiAt)+' · contratos BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}
@@ -397,4 +508,4 @@ async function getHistory(){
 }
 
 function tabs(){for(const b of document.querySelectorAll('[data-tf]'))b.addEventListener('click',()=>{state.tf=b.dataset.tf;document.querySelectorAll('[data-tf]').forEach(x=>x.classList.toggle('active',x===b));getCandles();getOiSeries();getAccountRatio();model();renderMarketSummary()})}function apply(){let n=Number($('threshold').value),d=Number($('distance').value);if(!Number.isFinite(n)||n<10000||!Number.isFinite(d)||d<.05||d>5){$('error').textContent='Umbral mínimo US$10.000; distancia entre 0,05% y 5%.';return}state.threshold=n;state.distance=d;state.whales=state.whales.filter(x=>x.usdt>=n);renderTrades();$('error').textContent='Configuración guardada en este dispositivo.';try{localStorage.setItem('btc-intelligence-config',JSON.stringify({threshold:n,distance:d}))}catch{}}function restore(){try{let d=JSON.parse(localStorage.getItem('btc-intelligence-config')||'{}');if(d.threshold>=10000)$('threshold').value=d.threshold;if(d.distance>=.05&&d.distance<=5)$('distance').value=d.distance}catch{}apply()}
-function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();evaluateAbsorption(now);renderAdvancedWhales(now);renderMarketSummary(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getOi();getCandles();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();
+function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderMarketSummary(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getOi();getCandles();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();

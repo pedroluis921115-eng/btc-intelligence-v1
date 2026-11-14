@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallWatch:new Map(),breakouts:[],lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
 const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function model(){
@@ -316,6 +316,80 @@ function renderMarketSummary(now=Date.now()){
 
 // Reading guide: order-book levels are visible aggregate orders, not guaranteed support/resistance.
 const WALL_MIN_USD=180000,WALL_MIN_AGE=12000,WALL_MAX_DIST=.012;
+// Same book-relative policy for classification, drops, reappearances and alerts.
+// Absolute floors and ceilings avoid noisy or unreachable thresholds.
+function relativeWallPolicy(now=Date.now()){
+ if(state.wallPolicy&&now-state.wallPolicy.at<5000)return state.wallPolicy;
+ const sidePolicy=book=>{
+  const amounts=[...book].map(([p,q])=>Number(p)*Number(q))
+   .filter(v=>v>0&&Number.isFinite(v)).sort((a,b)=>a-b);
+  const n=amounts.length,median=n>=15?amounts[Math.floor((n-1)/2)]:0;
+  const p90=n>=15?amounts[Math.floor((n-1)*.9)]:0;
+  const threshold=Math.max(80000,Math.min(850000,p90*2.5));
+  return {median,p90,threshold,n,notice:Math.max(250000,Math.min(1800000,threshold*2.4)),
+   drop:Math.max(120000,Math.min(950000,threshold*.9)),
+   move:Math.max(70000,Math.min(600000,threshold*.5))}
+ };
+ state.wallPolicy={at:now,bid:sidePolicy(state.bids),ask:sidePolicy(state.asks)};
+ return state.wallPolicy
+}
+function wallThreshold(side,now=Date.now()){
+ return relativeWallPolicy(now)[side].threshold
+}
+function captureWallChanges(side,p,oldQty,newQty,now,key){
+ const policy=relativeWallPolicy(now)[side];
+ const previous=p*oldQty,next=p*newQty,change=next-previous;
+ const near=state.price>0&&Math.abs(p/state.price-1)<=WALL_MAX_DIST;
+ let m=state.wallMetrics.get(key);
+ if(!m){m={key,side,p,firstAt:now,updates:0,added:0,removed:0,peak:0,lastNotional:previous,qualifiedSince:0};state.wallMetrics.set(key,m)}
+ if(Math.abs(change)>=0.01){m.updates++;if(change>0)m.added+=change;else m.removed-=change}
+ m.lastNotional=next;m.peak=Math.max(m.peak,previous,next);m.lastAt=now;
+ if(near&&Math.abs(change)>=policy.move&&Math.abs(change)>=Math.max(previous,next)*.25){
+  state.wallEvents.unshift({ts:now,side,p,change,from:previous,to:next,type:change>0?'up':'down'});
+  state.wallEvents=state.wallEvents.slice(0,24)
+ }
+ if(previous>=policy.threshold&&next<policy.threshold&&next<=previous*.30&&near){
+  state.wallDisappeared.set(key,{ts:now,side,p,former:previous});
+ }else if(previous<=policy.threshold*.25&&next>=policy.threshold&&near){
+  const prior=state.wallDisappeared.get(key);
+  if(prior&&now-prior.ts>=1500&&now-prior.ts<=180000){
+   state.wallReappearances.unshift({ts:now,side,p,notional:next,absence:now-prior.ts,former:prior.former});
+   state.wallReappearances=state.wallReappearances.slice(0,12);
+   state.wallDisappeared.delete(key)
+  }
+ }
+}
+function cleanupWallHistory(now=Date.now()){
+ for(const [k,v] of state.wallDisappeared)if(now-v.ts>180000)state.wallDisappeared.delete(k);
+ for(const [k,v] of state.wallMetrics)if(now-v.lastAt>300000)state.wallMetrics.delete(k);
+ if(state.wallDisappeared.size>300){
+  const keys=[...state.wallDisappeared].sort((a,b)=>a[1].ts-b[1].ts);
+  for(const [k] of keys.slice(0,state.wallDisappeared.size-300))state.wallDisappeared.delete(k)
+ }
+ if(state.wallMetrics.size>550){
+  const keys=[...state.wallMetrics].sort((a,b)=>a[1].lastAt-b[1].lastAt);
+  for(const [k] of keys.slice(0,state.wallMetrics.size-550))state.wallMetrics.delete(k)
+ }
+}
+function renderWallEvolution(now=Date.now()){
+ const policy=relativeWallPolicy(now),target=$('wallEvolution'),returning=$('wallReturns');
+ if(!target||!returning)return;
+ $('wallAdaptiveScope').textContent='Umbral visible · compra '+usd(policy.bid.threshold)+
+  ' / venta '+usd(policy.ask.threshold)+' · basado en percentil 90 por lado ×2,5, con límites';
+ target.innerHTML=state.wallEvents.filter(x=>now-x.ts<300000).slice(0,6).map(x=>
+  '<div class="alertrow"><span class="'+(x.side==='bid'?'up':'down')+'">'+
+  (x.side==='bid'?'COMPRA':'VENTA')+'</span> '+usd(x.p)+' · '+
+  (x.change>=0?'aumentó ':'disminuyó ')+usd(Math.abs(x.change))+
+  ' · antes '+usd(x.from)+' / después '+usd(x.to)+'</div>').join('')||
+  '<div class="empty">Sin cambios de tamaño relevantes observados.</div>';
+ returning.innerHTML=state.wallReappearances.filter(x=>now-x.ts<600000).slice(0,5).map(x=>
+  '<div class="alertrow"><span class="'+(x.side==='bid'?'up':'down')+'">'+
+  (x.side==='bid'?'COMPRA':'VENTA')+'</span> '+usd(x.p)+
+  ' · reapareció el nivel tras '+wallAge(x.absence)+' · '+usd(x.notional)+
+  ' visibles</div>').join('')||
+  '<div class="empty">Sin niveles que hayan desaparecido y reaparecido en esta sesión.</div>'
+}
+
 
 // Two distinct views: exact price levels (for breakouts) and aggregate price
 // buckets (for nearby liquidity). A zone is NOT one executable order.
@@ -327,6 +401,7 @@ function wallPriority(v,qualifiedAge,distPct,baseline=WALL_MIN_USD){
 function liquidityZones(now=Date.now()){
  if(!state.price||!state.wsOk||now-state.lastBookAt>10000){state.zoneSeen.clear();return {bid:[],ask:[],width:0}}
  const width=Math.max(10,Math.round(state.price*.0003/5)*5),zones=new Map();
+ const policy=relativeWallPolicy(now);
  for(const [book,side] of [[state.bids,'bid'],[state.asks,'ask']]){
   for(const [raw,q] of book){
    const price=Number(raw),qty=Number(q);
@@ -343,7 +418,7 @@ function liquidityZones(now=Date.now()){
   const notionalLevels=[...levelBook].map(([p,q])=>Number(p)*Number(q))
    .filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
   const median=notionalLevels.length>=10?notionalLevels[Math.floor((notionalLevels.length-1)/2)]:0;
-  const threshold=Math.max(180000,Math.min(2500000,median*4));
+  const threshold=Math.max(policy[side].threshold,Math.min(2500000,median*4));
   for(const x of list){
    x.threshold=threshold;x.center=x.pv/x.total;
    x.dist=Math.abs(x.center/state.price-1)*100;
@@ -373,7 +448,7 @@ function renderLiquidityZones(now=Date.now()){
    '<div class="empty">Sin niveles próximos para agrupar.</div>'
  };
  render('bid');render('ask');
- if($('zoneScope'))$('zoneScope').textContent='Bandas '+usd(out.width)+' · umbral dinámico según mediana por NIVEL ×4 (mínimo US$180.000, máximo US$2,5 millones) · observado desde que abriste la app';
+ if($('zoneScope'))$('zoneScope').textContent='Bandas '+usd(out.width)+' · umbral adaptativo por lado; zona = concentración agregada, distinta de un nivel individual · observado desde que abriste la app';
 }
 
 function rankWallLevels(now=Date.now()){
@@ -381,17 +456,18 @@ function rankWallLevels(now=Date.now()){
  const combined=[...state.bids].map(([p,q])=>({p:+p,v:+p*+q,side:'bid',key:'B:'+p}))
  .concat([...state.asks].map(([p,q])=>({p:+p,v:+p*+q,side:'ask',key:'A:'+p})));
  return combined.filter(x=>Number.isFinite(x.v)&&x.v>0&&x.p>0&&Math.abs(x.p/state.price-1)<=WALL_MAX_DIST)
- .map(x=>({...x,age:now-(state.wallSeen.get(x.key)||now),qualifiedAge:now-(state.wallQualifiedSince.get(x.key)||now),dist:100*(x.p/state.price-1)})).map(x=>({...x,priority:wallPriority(x.v,x.qualifiedAge,x.dist)}))
- .sort((a,b)=>Number(b.qualifiedAge>=WALL_MIN_AGE&&b.v>=WALL_MIN_USD)-Number(a.qualifiedAge>=WALL_MIN_AGE&&a.v>=WALL_MIN_USD)||b.priority-a.priority);
+ .map(x=>({...x,age:now-(state.wallSeen.get(x.key)||now),qualifiedAge:now-(state.wallQualifiedSince.get(x.key)||now),dist:100*(x.p/state.price-1)})).map(x=>({...x,priority:wallPriority(x.v,x.qualifiedAge,x.dist,wallThreshold(x.side,now))}))
+ .sort((a,b)=>Number(b.qualifiedAge>=WALL_MIN_AGE&&b.v>=wallThreshold(b.side,now))-Number(a.qualifiedAge>=WALL_MIN_AGE&&a.v>=wallThreshold(a.side,now))||b.priority-a.priority);
 }
 function recordWallDrop(side,p,oldQty,newQty,age,now){
  const prev=p*oldQty,next=p*newQty,lost=prev-next,key=(side==='bid'?'B:':'A:')+p;
- if(prev<250000||lost<200000||lost/prev<.65||age<8000||!state.price||Math.abs(p/state.price-1)>.008)return;
+ const policy=relativeWallPolicy(now)[side];
+ if(prev<policy.threshold||lost<policy.drop||lost/prev<.65||age<8000||!state.price||Math.abs(p/state.price-1)>.008)return;
  if(now-(state.wallDropCooldown.get(key)||0)<45000)return;
  state.wallDropCooldown.set(key,now);
  state.wallDrops.unshift({ts:now,side,p,prev,lost,next,status:'pending',matched:0});
  state.wallDrops=state.wallDrops.slice(0,12);
- if(lost>=350000&&Math.abs(p/state.price-1)<.004&&now-state.lastWallDropAlertAt>90000){
+ if(lost>=policy.notice*.60&&Math.abs(p/state.price-1)<.004&&now-state.lastWallDropAlertAt>90000){
   state.lastWallDropAlertAt=now;
   alertUser('MURO '+(side==='bid'?'COMPRADOR':'VENDEDOR')+' reducido '+usd(lost)+' en '+usd(p)+'; ejecución/cancelación no confirmada','wall-drop-'+side+'-'+p,180000)
  }
@@ -412,6 +488,8 @@ function renderWallInsights(now=Date.now()){
  const bids=$('strongBidLevels'),asks=$('strongAskLevels'),events=$('wallDropEvents');
  if(!bids||!asks||!events)return;
  if(now-state.lastBookAt>15000||!state.wsOk){
+  if($('wallEvolution'))$('wallEvolution').textContent='Sin datos recientes';
+  if($('wallReturns'))$('wallReturns').textContent='Sin datos recientes';
   bids.textContent='Libro sin datos recientes';asks.textContent='Libro sin datos recientes';
   state.zoneSeen.clear();
   $('liquidityBidZones').textContent='Libro sin datos recientes';
@@ -421,21 +499,22 @@ function renderWallInsights(now=Date.now()){
  }
  const levels=rankWallLevels(now);
  renderLiquidityZones(now);
+ renderWallEvolution(now);
  if(now-state.lastWallArrivalAt>120000){
-  const notable=levels.find(x=>x.v>=750000&&x.age>=15000&&Math.abs(x.dist)<=.30);
+  const notable=levels.find(x=>x.v>=relativeWallPolicy(now)[x.side].notice&&x.qualifiedAge>=15000&&Math.abs(x.dist)<=.30);
   if(notable){
    state.lastWallArrivalAt=now;
    alertUser('MURO '+(notable.side==='bid'?'COMPRADOR':'VENDEDOR')+' visible '+usd(notable.v)+' a '+usd(notable.p)+' (persistencia '+wallAge(notable.age)+')','wall-arrive-'+notable.side+':'+notable.p,600000)
   }
  }
  const list=side=>levels.filter(x=>x.side===side).slice(0,3)
-  .map((x,i)=>'<div class="alertrow">'+(i+1)+'. <strong>'+usd(x.p)+'</strong> · '+usd(x.v)+' · '+wallAge(x.age)+' visible · '+Math.abs(x.dist).toFixed(2)+'% del precio · '+(x.qualifiedAge>=WALL_MIN_AGE&&x.v>=WALL_MIN_USD?'VIGILADO':'nuevo/menor')+' · prioridad '+x.priority.toFixed(2)+'</div>').join('')
+  .map((x,i)=>'<div class="alertrow">'+(i+1)+'. <strong>'+usd(x.p)+'</strong> · '+usd(x.v)+' · '+wallAge(x.age)+' visible · '+Math.abs(x.dist).toFixed(2)+'% del precio · '+(x.qualifiedAge>=WALL_MIN_AGE&&x.v>=wallThreshold(x.side,now)?'VIGILADO':'nuevo/menor')+' · prioridad '+x.priority.toFixed(2)+'</div>').join('')
   ||'<div class="empty">Sin niveles visibles dentro de ±1,2%.</div>';
  bids.innerHTML=list('bid');asks.innerHTML=list('ask');
  $('wallInsightStamp').textContent='Candidatos observados desde que abriste la app · '+time(now);
  // Arm prior levels; do not infer past crossings from levels first seen after the move.
  for(const x of levels){
-  if(x.qualifiedAge<WALL_MIN_AGE||x.v<WALL_MIN_USD)continue;
+  if(x.qualifiedAge<WALL_MIN_AGE||x.v<wallThreshold(x.side,now))continue;
   const onExpectedSide=x.side==='bid'?state.price>x.p*1.00025:state.price<x.p*.99975;
   let watch=state.wallWatch.get(x.key);
   if(!watch){
@@ -466,7 +545,7 @@ function isTrackedWallPresent(watch,now=Date.now()){
  const book=watch.side==='bid'?state.bids:state.asks;
  const qty=Number(book.get(watch.key.slice(2)));
  const since=state.wallQualifiedSince.get(watch.key);
- return Number.isFinite(qty)&&qty*watch.level>=WALL_MIN_USD&&Number.isFinite(since)&&now-since>=WALL_MIN_AGE;
+ return Number.isFinite(qty)&&qty*watch.level>=wallThreshold(watch.side,now)&&Number.isFinite(since)&&now-since>=WALL_MIN_AGE;
 }
 
 function checkBreakouts(now=Date.now()){
@@ -513,26 +592,42 @@ function onBook(d){
  const now=Date.now();
  if(d.type==='snapshot'||a.u===1){
   resetWallTracking();
-  state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.heatSamples=[];state.lastHeatAt=0;drawLiquidityHeat();
+  state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.wallDisappeared.clear();state.wallPolicy=null;state.heatSamples=[];state.lastHeatAt=0;drawLiquidityHeat();
  }
  for(const [updates,book,prefix] of [[a.b,state.bids,'B:'],[a.a,state.asks,'A:']]){
   for(const [p,q] of updates){
    if(!Number.isFinite(+p)||+p<=0||!Number.isFinite(+q))continue;
    const key=prefix+p;
    const oldQty=Number(book.get(p))||0,priorNotional=oldQty*(+p),newNotional=(+q)*(+p);
+   if(d.type==='delta'&&a.u!==1)captureWallChanges(prefix==='B:'?'bid':'ask',+p,oldQty,+q,now,key);
    if(d.type==='delta'&&a.u!==1&&oldQty>+q){
     const age=now-(state.wallSeen.get(key)||now);
     recordWallDrop(prefix==='B:'?'bid':'ask',+p,oldQty,+q,age,now)
    }
    if(+q<=0){book.delete(p);state.wallSeen.delete(key);state.wallQualifiedSince.delete(key);continue}
    if(!book.has(p))state.wallSeen.set(key,now);
-   if(newNotional>=WALL_MIN_USD){
-    if(priorNotional<WALL_MIN_USD||!state.wallQualifiedSince.has(key))state.wallQualifiedSince.set(key,now)
+   const limit=wallThreshold(prefix==='B:'?'bid':'ask',now);
+   if(newNotional>=limit){
+    if(priorNotional<limit||!state.wallQualifiedSince.has(key))state.wallQualifiedSince.set(key,now)
    }else state.wallQualifiedSince.delete(key);
    book.set(p,q)
   }
  }
  state.lastBookAt=now;
+ // Recalibrate only after the completed snapshot, or every five seconds for deltas.
+ if(d.type==='snapshot'||a.u===1||!state.wallPolicy||now-state.wallPolicy.at>=5000){
+  state.wallPolicy=null;
+  const policy=relativeWallPolicy(now);
+  for(const [book,prefix,side] of [[state.bids,'B:','bid'],[state.asks,'A:','ask']]){
+   for(const [p,q] of book){
+    const key=prefix+p,notional=Number(p)*Number(q);
+    if(notional>=policy[side].threshold){
+     if(!state.wallQualifiedSince.has(key))state.wallQualifiedSince.set(key,now)
+    }else state.wallQualifiedSince.delete(key)
+   }
+  }
+ }
+ if(!state.lastWallCleanupAt||now-state.lastWallCleanupAt>15000){state.lastWallCleanupAt=now;cleanupWallHistory(now)}
  if(now-state.lastBookRenderAt>500){state.lastBookRenderAt=now;renderBook()}
 }
 function onLiquidation(d){if(!Array.isArray(d.data))return;for(const l of d.data){let p=asNum(l.p),q=asNum(l.v);if(!p||!q)continue;let side=l.S==='Buy'?'long':'short',v=p*q,ts=asNum(l.T)||Date.now();if(side==='long')state.longLiq+=v;else state.shortLiq+=v;state.liq.unshift({side,price:p,notional:v,ts})}state.liq=state.liq.slice(0,100);state.lastLiqAt=Date.now();renderLiq()}
@@ -620,7 +715,7 @@ function renderExchangeComparison(now=Date.now()){
   'Sin coincidencias de liquidez ≥US$100.000 por exchange dentro de ±0,035% del precio (mínimo US$10), entre los primeros 20 niveles por lado.'
 }
 
-function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
+function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.wallDisappeared.clear();state.wallPolicy=null;state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
 async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
 async function getOi(){// Public sources, no credentials, no simulated fallback.
 const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent='Última lectura '+time(state.lastOiAt)+' · contratos BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}

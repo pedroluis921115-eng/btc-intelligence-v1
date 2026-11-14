@@ -10,6 +10,8 @@
 
 **Bloque A3 (14/11/2026):** registro de aumentos/disminuciones del tamaño visible de cada nivel, memoria acotada, reapariciones del **nivel** de precio (no de una orden identificada), y umbrales por lado basados en percentil 90 de notional visible ×2,5 con límites US$80.000–850.000. Política común para clasificación, rupturas, alertas de aparición, reducción y zonas. Pruebas: `node tests/v2_a3_walls.test.cjs` (23 casos) y `node tests/v2_a3_mobile.cjs` (datos reales Android 390×844). Validación prolongada seguirá pendiente.
 
+**Bloque B — mapa de calor (14/11/2026):** escala vertical adaptable a los precios absolutos de las muestras y al precio actual; agrupación temporal de libros sin proyectar cantidades antiguas sobre precios nuevos; bandas compras/ventas simultáneas; intensidad relativa logarítmica con percentil 90; marcas de hora local y huecos sin interpolar; compresión por precio, 160 buckets por lado, máximo 72 muestras/6 minutos, no capturar cuando la página está oculta, transformaciones de canvas sin escalados acumulativos y reutilización de dimensiones. Pruebas: `node tests/v2_heatmap.test.cjs` (20 casos) y `node tests/v2_heatmap_mobile.cjs` (390×844 con Bybit/otros componentes reales). No se ha medido duración de batería ni validado Android prolongadamente; #39 continúa ROJO.
+
 ## Libro de órdenes y bloqueos
 - 🟢 01 Agrupar liquidez en bandas contiguas próximas por lado, sumando importes visibles de Bybit sin tratarlos como una orden única. Rangos y umbrales visibles en pantalla.
 - 🟢 02 Registrar incrementos y reducciones relevantes de liquidez visible, importes antes/después y acumulados observados por nivel, con historial limitado y panel de evolución.
@@ -18,11 +20,11 @@
 - 🟢 05 Prioridad relativa de muros y zonas mediante tamaño, permanencia observada y distancia al precio; índice comparativo, nunca probabilidad de resistencia.
 
 ## Mapa de calor
-- 🔴 06 Escala de precios adaptable.
-- 🔴 07 Conservar referencias históricas con desplazamientos del precio.
-- 🔴 08 Contraste de intensidades.
-- 🔴 09 Intervalos temporales claramente legibles.
-- 🔴 10 Optimización de renderizado y batería Android.
+- 🟢 06 Escala vertical adaptable al rango de precios absolutos de las capturas, con margen para cambios rápidos de BTC.
+- 🟢 07 Cada muestra conserva su nivel absoluto: no se trasladan concentraciones antiguas cuando se mueve el precio actual; ventanas sin reconstrucción ficticia.
+- 🟢 08 Intensidad logarítmica relativa al percentil 90 y representación de ambas direcciones en una banda de precio cuando coexisten.
+- 🟢 09 Posicionamiento de muestras según timestamps reales y etiquetas de hora local; huecos sin observaciones quedan vacíos y se señalan.
+- 🟢 10 Optimización de recursos Android: muestreo solo en primer plano y con libro reciente, muestras comprimidas y acotadas, redibujo sin reiniciar tamaño del canvas salvo cambio real de dimensiones. **No implica medición experimental de ahorro de batería** (pendiente #39).
 
 ## Rupturas
 - 🟢 11 No atribuir rupturas a muros eliminados o reducidos bajo el umbral. Incluye seguimiento de antigüedad de *importe suficiente* y preservación de claves exactas de precio del exchange.
@@ -66,4 +68,4 @@
 - 🔴 39 Validación prolongada de sesiones Android.
 - 🔴 40 Comprobación automática de publicación.
 
-**Estado tras A3:** 10 ítems completamente terminados / 40 propuestos (25%); 30 pendientes. Verde significa implementado, probado y publicado, no implica validación estadística de rentabilidad. La prueba de estabilidad prolongada Android (#39) permanece ROJA.
+**Estado tras Bloque B:** 15 ítems completamente terminados / 40 propuestos (37,5%); 25 pendientes. Verde = función implementada, probada y publicada. No se confunden tests de lógica o navegador móvil con validación prolongada de rendimiento/batería (#39, ROJO).

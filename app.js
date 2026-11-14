@@ -91,65 +91,138 @@ function renderBook(){
 
 // Bybit L2 only: observed resting orders. Samples are captured in this browser,
 // never backfilled, and are intentionally capped at 72 x 100 levels for mobile.
-const HEAT_SAMPLE_MS=5000,HEAT_MAX_SAMPLES=72;
+// Real-time L2 historical heatmap: chronological snapshots only while visible.
+// Fixed prices, never re-center previous quantities onto the newest price.
+const HEAT_SAMPLE_MS=5000,HEAT_MAX_SAMPLES=72,HEAT_WINDOW_MS=HEAT_SAMPLE_MS*HEAT_MAX_SAMPLES;
+const HEAT_ROWS=34,HEAT_CAPTURE_BINS=160;
+function heatBucketWidth(price){
+ return Math.max(2,Math.round(price*.00012/2)*2)
+}
+function compressHeatSide(book,price){
+ const step=heatBucketWidth(price),min=price*.987,max=price*1.013,bins=new Map();
+ for(const [rawPrice,rawQty] of book){
+  const p=Number(rawPrice),q=Number(rawQty);
+  if(!(p>0&&q>0&&p>=min&&p<=max))continue;
+  const bucket=Math.round(p/step);
+  bins.set(bucket,(bins.get(bucket)||0)+p*q)
+ }
+ // Retain most relevant buckets in bounded form; each stored center is ABSOLUTE.
+ return [...bins].map(([bucket,value])=>[bucket*step,value])
+  .sort((a,b)=>b[1]-a[1]).slice(0,HEAT_CAPTURE_BINS)
+  .sort((a,b)=>a[0]-b[0])
+}
+function pruneHeat(now=Date.now()){
+ state.heatSamples=state.heatSamples.filter(s=>now-s.ts<=HEAT_WINDOW_MS&&s.ts<=now+1000);
+ if(state.heatSamples.length>HEAT_MAX_SAMPLES)state.heatSamples=state.heatSamples.slice(-HEAT_MAX_SAMPLES)
+}
 function captureLiquidityHeat(){
  const now=Date.now();
- if(document.hidden||now-state.lastBookAt>12000||now-state.lastPriceAt>30000||!state.price)return;
- const capture=(book)=>[...book].map(([p,q])=>[Number(p),Number(p)*Number(q)]).filter(([price,usdVal])=>price>0&&usdVal>0);
- state.heatSamples.push({ts:now,price:state.price,bids:capture(state.bids),asks:capture(state.asks)});
- if(state.heatSamples.length>HEAT_MAX_SAMPLES)state.heatSamples.shift();
- state.lastHeatAt=now;
+ if(document.hidden||!state.wsOk||now-state.lastBookAt>12000||now-state.lastPriceAt>30000||!state.price)return;
+ const sample={ts:now,price:state.price,bids:compressHeatSide(state.bids,state.price),asks:compressHeatSide(state.asks,state.price)};
+ if(state.heatSamples.length&&sample.ts<=state.heatSamples.at(-1).ts)return;
+ state.heatSamples.push(sample);pruneHeat(now);state.lastHeatAt=now;
  drawLiquidityHeat()
+}
+// Pure geometry for deterministic tests and browser drawing.
+function heatGeometry(samples,currentPrice){
+ const anchors=samples.map(s=>s.price).filter(x=>x>0&&Number.isFinite(x));
+ if(currentPrice>0&&Number.isFinite(currentPrice))anchors.push(currentPrice);
+ if(!anchors.length)return null;
+ const lower=Math.min(...anchors),upper=Math.max(...anchors);
+ const margin=Math.max(currentPrice*.0011,(upper-lower)*.20);
+ const min=lower-margin,max=upper+margin;
+ return {min,max,step:(max-min)/HEAT_ROWS,rows:HEAT_ROWS,
+  priceRow:p=>Math.floor((max-p)/(max-min)*HEAT_ROWS),
+  yRatio:p=>(max-p)/(max-min)}
+}
+function heatIntensity(volume,scale){
+ if(!(volume>0)||!(scale>0))return 0;
+ // Logarithmic transform prevents one very large wall from drowning other levels.
+ return Math.min(.95,.13+.82*Math.log1p(volume)/Math.log1p(scale))
 }
 function drawLiquidityHeat(){
  const canvas=$('liquidityHeat');if(!canvas)return;
- const r=canvas.parentElement.getBoundingClientRect();
- const dpr=Math.min(window.devicePixelRatio||1,2),w=Math.max(240,r.width),h=Math.max(205,r.height),c=canvas.getContext('2d');
- canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);c.scale(dpr,dpr);c.fillStyle='#091322';c.fillRect(0,0,w,h);
- const samples=state.heatSamples,now=Date.now();
+ const now=Date.now();
+ pruneHeat(now);
+ if(document.hidden)return;
+ const width=Math.max(240,Math.round(canvas.parentElement.getBoundingClientRect().width)),
+ height=Math.max(205,Math.round(canvas.parentElement.getBoundingClientRect().height)),
+ dpr=Math.min(window.devicePixelRatio||1,2),pixelWidth=Math.round(width*dpr),pixelHeight=Math.round(height*dpr);
+ if(canvas.width!==pixelWidth||canvas.height!==pixelHeight){
+  canvas.width=pixelWidth;canvas.height=pixelHeight
+ }
+ const c=canvas.getContext('2d');if(!c)return;
+ c.setTransform(dpr,0,0,dpr,0,0);c.fillStyle='#091322';c.fillRect(0,0,width,height);
+ const samples=state.heatSamples;
  if(!samples.length){
-  c.fillStyle='#9cb0c8';c.font='12px system-ui';c.fillText('Reuniendo muestras del libro en vivo...',14,h/2);
-  $('liquidityHeatStamp').textContent='Historial disponible solo con la página abierta';return
+  c.fillStyle='#9cb0c8';c.font='12px system-ui';c.fillText('Reuniendo muestras del libro en vivo...',14,height/2);
+  $('liquidityHeatStamp').textContent='Historial solo con la página abierta, sin reconstrucción artificial';return
  }
- const reference=state.price,step=reference>=100000?10:5,rows=29,half=(rows-1)/2;
- const max= Math.round(reference/step)*step+half*step,min=max-(rows-1)*step;
- const x0=9,y0=15,axisWidth=61,chartWidth=w-axisWidth-x0,colWidth=chartWidth/HEAT_MAX_SAMPLES,chartHeight=h-38,rowHeight=chartHeight/rows;
- const grid=[];
- const values=[];
- for(const snap of samples){
-  const rowData=Array.from({length:rows},()=>[0,0]);
-  for(const [book,side] of [[snap.bids,0],[snap.asks,1]])for(const [price,vol] of book){
-   const row=Math.round((max-price)/step);
-   if(row>=0&&row<rows&&vol>0&&Number.isFinite(vol))rowData[row][side]+=vol;
+ const geom=heatGeometry(samples,state.price);if(!geom)return;
+ const x0=8,y0=15,axisWidth=70,chartWidth=width-axisWidth-x0,chartHeight=height-44;
+ const rowHeight=chartHeight/HEAT_ROWS,windowStart=Math.max(now-HEAT_WINDOW_MS,samples[0].ts-HEAT_SAMPLE_MS);
+ const timeSpan=Math.max(HEAT_SAMPLE_MS,now-windowStart);
+ const xAt=t=>x0+(t-windowStart)/timeSpan*chartWidth;
+ const colWidth=Math.max(1,Math.min(chartWidth/HEAT_MAX_SAMPLES,chartWidth*HEAT_SAMPLE_MS/timeSpan));
+ const histogram=[],quantities=[],gaps=[];
+ for(let i=0;i<samples.length;i++){
+  const snap=samples[i],rows=Array.from({length:HEAT_ROWS},()=>[0,0]);
+  for(const [book,side] of [[snap.bids,0],[snap.asks,1]]){
+   for(const [price,value] of book){
+    const row=geom.priceRow(price);
+    if(row>=0&&row<HEAT_ROWS&&Number.isFinite(value)&&value>0)rows[row][side]+=value
+   }
   }
-  grid.push(rowData);for(const [b,a] of rowData){if(b>0)values.push(b);if(a>0)values.push(a)}
+  histogram.push(rows);
+  for(const [buy,sell] of rows){if(buy>0)quantities.push(buy);if(sell>0)quantities.push(sell)}
+  if(i>0&&snap.ts-samples[i-1].ts>HEAT_SAMPLE_MS*1.8)gaps.push(snap.ts-samples[i-1].ts)
  }
- values.sort((a,b)=>a-b);const scale=Math.max(1,values[Math.floor((values.length-1)*.9)]||1);
- for(let i=0;i<grid.length;i++){
-  const x=x0+(HEAT_MAX_SAMPLES-grid.length+i)*colWidth;
-  for(let j=0;j<rows;j++){
-   const [buy,sell]=grid[i][j];
-   if(!buy&&!sell)continue;
-   const v=Math.max(buy,sell),opacity=Math.min(.94,.1+.83*Math.sqrt(Math.min(1,v/scale)));
-   c.fillStyle=buy>=sell?'rgba(52,213,161,'+opacity+')':'rgba(250,107,132,'+opacity+')';
-   c.fillRect(x+0.2,y0+j*rowHeight+0.1,Math.max(.5,colWidth-.5),Math.max(.5,rowHeight-.65));
+ quantities.sort((a,b)=>a-b);
+ const scale=Math.max(1,quantities[Math.floor((quantities.length-1)*.90)]||1);
+ for(let i=0;i<samples.length;i++){
+  const snap=samples[i],x=xAt(snap.ts);
+  if(x<0||x>=width-axisWidth+1)continue;
+  const rows=histogram[i];
+  for(let r=0;r<HEAT_ROWS;r++){
+   const [b,a]=rows[r],value=Math.max(b,a);
+   if(!value)continue;
+   const y=y0+r*rowHeight,cellW=Math.max(.8,colWidth-.5),cellH=Math.max(.5,rowHeight-.6);
+   // Both sides can coexist at the same price bucket: split the cell vertically.
+   if(b>0&&a>0){
+    c.fillStyle='rgba(52,213,161,'+heatIntensity(b,scale)+')';c.fillRect(x,y,cellW,cellH/2);
+    c.fillStyle='rgba(250,107,132,'+heatIntensity(a,scale)+')';c.fillRect(x,y+cellH/2,cellW,cellH/2)
+   }else{
+    c.fillStyle=b>0?'rgba(52,213,161,'+heatIntensity(b,scale)+')':'rgba(250,107,132,'+heatIntensity(a,scale)+')';
+    c.fillRect(x,y,cellW,cellH)
+   }
   }
  }
+ // Transparent areas without samples are gaps, NOT zero-liquidity observations.
  c.strokeStyle='#26364a';c.lineWidth=.7;c.font='10px system-ui';c.textAlign='right';
- for(let j=0;j<rows;j+=7){
-  const y=y0+(j+.5)*rowHeight,v=max-j*step;
-  c.beginPath();c.moveTo(x0,y);c.lineTo(w-axisWidth+4,y);c.stroke();
-  c.fillStyle='#93abc5';c.fillText('$'+cash(v),w-3,Math.min(h-24,y+3));
+ for(let r=0;r<=HEAT_ROWS;r+=Math.max(1,Math.floor(HEAT_ROWS/4))){
+  const y=y0+r*rowHeight,v=geom.max-r*geom.step;
+  c.beginPath();c.moveTo(x0,y);c.lineTo(width-axisWidth+4,y);c.stroke();
+  c.fillStyle='#93abc5';c.fillText('$'+cash(v),width-3,Math.min(height-27,y+3))
  }
- const yPrice=y0+(max-reference)/step*rowHeight+rowHeight/2;
+ const yPrice=y0+geom.yRatio(state.price)*chartHeight;
  if(yPrice>=y0&&yPrice<y0+chartHeight){
-  c.strokeStyle='#62d6ed';c.lineWidth=1.2;c.setLineDash([3,3]);c.beginPath();c.moveTo(x0,yPrice);c.lineTo(w-axisWidth+3,yPrice);c.stroke();c.setLineDash([])
+  c.strokeStyle='#62d6ed';c.lineWidth=1.2;c.setLineDash([3,3]);
+  c.beginPath();c.moveTo(x0,yPrice);c.lineTo(width-axisWidth+3,yPrice);c.stroke();c.setLineDash([])
  }
- c.font='10px system-ui';c.textAlign='left';c.fillStyle='#9cb0c8';
- c.fillText(time(samples[0].ts).slice(0,5),x0,h-5);
- c.textAlign='right';c.fillText(time(samples.at(-1).ts).slice(0,5),w-axisWidth,h-5);
- $('liquidityHeatStamp').textContent=samples.length+' muestras de 5 s · '+Math.min(6,Math.round((now-samples[0].ts)/6000)/10)+' min registrados · Bybit L2 (200 niveles por lado)';
- if(now-state.lastHeatAt>15000)$('liquidityHeatStamp').textContent+=' · datos pausados'
+ const fmt=ts=>new Date(ts).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
+ c.font='10px system-ui';c.fillStyle='#9cb0c8';c.textAlign='left';
+ // Tick labels reflect actual time, not sample ordinal.
+ const tickCount=3;
+ for(let i=0;i<tickCount;i++){
+  const ts=windowStart+timeSpan*i/(tickCount-1),x=xAt(ts);
+  c.textAlign=i===0?'left':i===tickCount-1?'right':'center';
+  c.fillText(fmt(ts),x,height-5)
+ }
+ const duration=(samples.at(-1).ts-samples[0].ts)/60000;
+ $('liquidityHeatStamp').textContent=samples.length+' muestras / '+duration.toFixed(1)+
+  ' min de alcance · paso nominal 5 s · hora local · precios absolutos · intensidad logarítmica relativa';
+ if(gaps.length)$('liquidityHeatStamp').textContent+=' · '+gaps.length+' hueco(s) sin reconstruir';
+ if(now-state.lastHeatAt>15000)$('liquidityHeatStamp').textContent+=' · captura pausada';
 }
 
 // Heuristic, not proof of a passive order or a specific whale: compare aggressor

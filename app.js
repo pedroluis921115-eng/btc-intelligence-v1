@@ -69,16 +69,24 @@ function renderAlerts(now=Date.now(),force=false){
  if(!force&&now-state.lastAlertRenderAt<1000)return;
  state.lastAlertRenderAt=now;
  const target=$('alerts');if(!target)return;
- const ranked=[...state.alerts].sort((a,b)=>b.priority.rank-a.priority.rank||b.lastImportantAt-a.lastImportantAt);
+ const isHistoric=a=>now-a.lastImportantAt>600000||a.lastImportantAt<state.sessionStart;
+ const ranked=[...state.alerts].sort((a,b)=>
+  Number(isHistoric(a))-Number(isHistoric(b))||
+  b.priority.rank-a.priority.rank||b.lastImportantAt-a.lastImportantAt);
  const latest=state.alerts[0];
  const rows=ranked.slice(0,12);
  if(latest&&!rows.includes(latest)){rows.pop();rows.push(latest)}
- target.innerHTML=rows.map(a=>'<div class="alertrow alert-tier-'+a.priority.rank+'">'+
+ target.innerHTML=rows.map(a=>{
+  const historic=isHistoric(a);
+  const elapsed=Math.max(0,Math.floor((now-a.lastImportantAt)/60000));
+  return '<div class="alertrow alert-tier-'+a.priority.rank+'">'+
+  (historic?'<span class="alert-label">HISTÓRICA · hace '+elapsed+' min</span> ':'')+
   '<span class="alert-label alert-label-'+a.priority.rank+'">'+escapeHtml(a.priority.name)+'</span> '+
   '<span class="muted">'+time(a.lastImportantAt)+'</span> · '+
   escapeHtml(a.text)+
   (a.count>1?' · '+a.count+' observaciones relacionadas':'')+
-  '<div class="sub">'+escapeHtml(a.priority.reason)+' · '+escapeHtml(a.source)+'</div></div>').join('')||
+  '<div class="sub">'+escapeHtml(a.priority.reason)+' · '+escapeHtml(a.source)+'</div></div>'
+ }).join('')||
   '<div class="empty">No hay alertas registradas en esta sesión.</div>';
  $('alertsSummary').textContent=rows.length+' alertas visibles · '+state.alertReceived+
   ' observaciones consideradas · '+state.alertGrouped+' agrupadas sin nueva tarjeta · '+
@@ -1279,7 +1287,7 @@ function onTrade(d){
   state.lastFlowPrune=now;trimObservedFlows(now)
  }
  if(now-(state.lastTradeRenderAt||0)>1000){
-  state.lastTradeRenderAt=now;renderPrice();renderTrades()
+  state.lastTradeRenderAt=now;renderPrice();renderTrades();refreshConnectionLabels(now)
  }
  if(now-state.lastBreakCheckAt>1000){
   state.lastBreakCheckAt=now;checkBreakouts();renderBreakouts()
@@ -1316,7 +1324,7 @@ function onBook(d){
   }
  }
  state.lastBookAt=now;
- if(d.type==='snapshot'||a.u===1)renderRuntimeHealth(now);
+ if(d.type==='snapshot'||a.u===1||now-(state.lastStatusRefreshAt||0)>1200){state.lastStatusRefreshAt=now;refreshConnectionLabels(now)}
  // Recalibrate only after the completed snapshot, or every five seconds for deltas.
  if(d.type==='snapshot'||a.u===1||!state.wallPolicy||now-state.wallPolicy.at>=5000){
   state.wallPolicy=null;
@@ -1359,7 +1367,7 @@ function onLiquidation(d){
   state.liq.push({side,price:p,notional:v,ts,fp});
   state.lastLiqAt=now
  }
- trimObservedFlows(now);renderLiq()
+ trimObservedFlows(now);renderLiq();refreshConnectionLabels(now)
 }
 // Binance partial book depth20 is a full top-20 snapshot, never a diff.
 function normalizeBookRows(rows,descending){
@@ -1408,14 +1416,55 @@ function retryBybit(){
   state.bybitRetry=null;if(!document.hidden)connectBybit()
  },delay)
 }
+
+// BTCUSDT feed statuses are derived from received events, not a stale onopen label.
+function liveStreamStatus(now=Date.now()){
+ const bybit=bybitAlive()&&state.ws.readyState===1;
+ const binance=!!(state.binanceWs&&state.binanceWs.readyState===1);
+ return {bybit,binance,
+  trade:bybit&&state.lastPriceAt>0&&now>=state.lastPriceAt&&now-state.lastPriceAt<=20000,
+  book:bybit&&state.lastBookAt>0&&now>=state.lastBookAt&&now-state.lastBookAt<=15000,
+  binanceBook:binance&&state.binanceLastAt>0&&now>=state.binanceLastAt&&now-state.binanceLastAt<=14000,
+  liquidations:bybit&&state.lastLiqAt>0&&now>=state.lastLiqAt&&now-state.lastLiqAt<=300000}
+}
+function refreshConnectionLabels(now=Date.now()){
+ const f=liveStreamStatus(now);
+ const set=(id,label,good)=>{
+  const target=$(id);if(!target)return;
+  if(target.textContent!==label)target.textContent=label;
+  if(id==='bybitStatus'||id==='liqStatus')
+   target.className=good?'up':'gold'
+ };
+ if(!f.bybit){
+  set('bybitStatus','Sin conexión · esperando recuperación',false);
+  set('liqStatus','Sin conexión · eventos no disponibles',false)
+ }else{
+  set('bybitStatus',f.trade&&f.book?'Operaciones y libro vigentes':
+    f.trade?'Operaciones vigentes · esperando libro':
+    f.book?'Libro vigente · esperando operaciones':
+    'Suscrito · esperando operaciones y libro',f.trade&&f.book);
+  set('liqStatus',f.liquidations?'Última liquidación recibida '+time(state.lastLiqAt):
+    state.lastLiqAt?'Sin eventos recientes · última '+time(state.lastLiqAt):
+    'Suscrito · sin liquidaciones observadas',true)
+ }
+ set('binanceStatus',f.binanceBook?'Conectado · libro vigente':
+  f.binance?'Suscrito · esperando libro':'Sin conexión · esperando recuperación',f.binanceBook);
+ const header=f.trade&&f.book?'EN VIVO':
+  f.trade||f.book?'DATOS PARCIALES':
+  f.bybit?'CONECTANDO...':'SIN CONEXIÓN';
+ set('connection',header,f.trade&&f.book);
+ $('connection').className='pill '+(f.trade&&f.book?'good':'warn');
+ return f
+}
+
 function renderRuntimeHealth(now=Date.now()){
  const target=$('runtimeHealth');if(!target)return;
  const age=ts=>ts?Math.max(0,Math.round((now-ts)/1000))+' s':'sin eventos';
- const bybit=bybitAlive();
- target.textContent='Operaciones Bybit '+(bybit&&now-state.lastPriceAt<=20000?'vigentes':'sin datos vigentes')+
-  ' ('+age(state.lastPriceAt)+') · libro Bybit '+(bybit&&now-state.lastBookAt<=15000?'vigente':'sin datos vigentes')+
-  ' ('+age(state.lastBookAt)+') · Binance '+(state.binanceWs?.readyState===1&&now-state.binanceLastAt<=14000?'vigente':'sin datos vigentes')+
-  ' ('+age(state.binanceLastAt)+') · liquidaciones '+(bybit?(state.lastLiqAt?'último evento '+age(state.lastLiqAt):'suscrito, sin eventos'):'no suscrito')+
+ const status=refreshConnectionLabels(now);
+ target.textContent='Operaciones Bybit '+(status.trade?'vigentes':'sin datos vigentes')+
+  ' ('+age(state.lastPriceAt)+') · libro Bybit '+(status.book?'vigente':'sin datos vigentes')+
+  ' ('+age(state.lastBookAt)+') · Binance '+(status.binanceBook?'vigente':'sin datos vigentes')+
+  ' ('+age(state.binanceLastAt)+') · liquidaciones '+(status.bybit?(state.lastLiqAt?'último evento '+age(state.lastLiqAt):'suscrito, sin eventos'):'no suscrito')+
   ' · reinicios Bybit '+state.bybitReconnections+' / Binance '+state.binanceReconnections+
   ' · interrupciones no reconstruidas '+state.streamGaps+
   ' · dibujos omitidos al plegar '+state.hiddenDrawSkipped;
@@ -1449,6 +1498,7 @@ function onBinanceBook(msg,now=Date.now()){
  const bids=normalizeBookRows(msg.b,true),asks=normalizeBookRows(msg.a,false);
  if(bids.length<2||asks.length<2)return;
  state.binanceBids=bids;state.binanceAsks=asks;state.binanceLastAt=now;
+ if(now-(state.lastBinanceStatusAt||0)>1500){state.lastBinanceStatusAt=now;refreshConnectionLabels(now)}
  if(now-state.lastCompareAt>1000){state.lastCompareAt=now;renderExchangeComparison(now)}
 }
 
@@ -1596,7 +1646,7 @@ function renderExchangeComparison(now=Date.now()){
  const src=$('compareStatus'),conf=$('compareCoincidence'),detail=$('compareNormalization');
  src.textContent='Bybit '+(bybitFresh?'actualizado':'sin datos recientes')+
   ' · Binance '+(binanceFresh?'actualizado':'sin datos recientes')+' · '+time(now);
- $('binanceStatus').textContent=binanceFresh?'Conectado':'Sin datos recientes';
+ refreshConnectionLabels(now);
  if(!bybitFresh||!binanceFresh||Math.abs(state.lastBookAt-state.binanceLastAt)>5000){
   resetComparisonPersistence();
   detail.textContent='Sin referencias de precio simultáneas y frescas; persistencia reiniciada.';
@@ -1629,8 +1679,9 @@ function renderExchangeComparison(now=Date.now()){
    'Bybit '+usd(x.bybitPrice)+' ('+usd(x.bybitUsd)+') y Binance '+usd(x.binancePrice)+
    ' ('+usd(x.binanceUsd)+') · separación '+x.separationBps.toFixed(2)+' pb · '+
    'fortaleza relativa mínima ×'+x.comparableStrength.toFixed(2)+' · '+
-   (confirmed?'PERSISTENTE':'EN OBSERVACIÓN')+
-   ' ('+observed+' muestras de ambos libros; '+Math.round(age/1000)+' s)'
+   (confirmed?'PERSISTENTE':observed===0?'PENDIENTE DE MUESTRA SINCRONIZADA':'EN OBSERVACIÓN')+
+   (observed?' ('+observed+' '+(observed===1?'muestra':'muestras')+' de ambos libros; '+Math.round(age/1000)+' s)':
+    ' (sin observaciones sincronizadas verificadas)')
  }).join(' · ')+'. Son precios/posiciones relativas similares, no una misma orden ni garantía de soporte.':
   'Sin niveles ≥US$100.000 en cada mercado a profundidad relativa comparable (máximo 2 por lado). No se suman importes entre exchanges.'
 }
@@ -1934,7 +1985,8 @@ async function getHourlySentiment(){
   }else $('hourlySentimentStamp').textContent='Última lectura '+dateTime(end)+' · no se pudo refrescar';
  }finally{state.hourlyInFlight=false;renderSourceFreshness()}
 }
-function init(){initFolds();tabs();restore();renderTopSnapshot(Date.now(),true);$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(()=>safeVisibleCall(getOiSeries),60000);setInterval(()=>safeVisibleCall(getAccountRatio),60000);setInterval(()=>safeVisibleCall(getFunding),120000);setInterval(()=>safeVisibleCall(getOfficialFearGreed),3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(()=>safeVisibleCall(getHistory),300000);setInterval(()=>safeVisibleCall(getOi),60000);setInterval(()=>safeVisibleCall(getCandles),60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();monitorStreams(now);if(document.hidden)return;$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);renderTopSnapshot(now);renderRuntimeHealth(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){
+function init(){initFolds();tabs();restore();renderTopSnapshot(Date.now(),true);$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(()=>safeVisibleCall(getOiSeries),60000);setInterval(()=>safeVisibleCall(getAccountRatio),60000);setInterval(()=>safeVisibleCall(getFunding),120000);setInterval(()=>safeVisibleCall(getOfficialFearGreed),3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(()=>safeVisibleCall(getHistory),300000);setInterval(()=>safeVisibleCall(getOi),60000);setInterval(()=>safeVisibleCall(getCandles),60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();monitorStreams(now);if(document.hidden)return;$('clock').textContent='Ahora '+time(now);refreshConnectionLabels(now);renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);renderTopSnapshot(now);renderRuntimeHealth(now);
+ if(state.alertAgeMinute!==Math.floor(now/60000)){state.alertAgeMinute=Math.floor(now/60000);renderAlerts(now,true)}if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){
    monitorStreams();
    if(!state.ws||state.ws.readyState===3)connectBybit();
    getHourlySentiment();getOfficialFearGreed();getOi();getCandles();

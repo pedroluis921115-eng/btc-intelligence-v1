@@ -32,7 +32,7 @@ async function builtCurrentCommit(){
  if(build.status!=='built'||build.commit!==expected)
   throw Error('Pages status '+build.status+' commit '+build.commit+' != '+expected)
 }
-let last;
+let last,passed=false;
 for(let i=1,n=expected?36:1;i<=n;i++){
  try{
   await builtCurrentCommit();
@@ -41,10 +41,10 @@ for(let i=1,n=expected?36:1;i<=n;i++){
    .map(f=>retrieve(base+f+q)));
   const result=assertDeployed(html,js,sw,plan);
   console.log('PUBLICATION_PASS',version,result,expected||'local');
-  process.exit(0)
+  passed=true;break
  }catch(e){
   last=e;console.log('PUBLICATION_RETRY',i,e.message);
   if(i<n)await new Promise(resolve=>setTimeout(resolve,10000))
  }
 }
-console.error('PUBLICATION_HOLD',last?.message);process.exit(1);
+if(!passed){console.error('PUBLICATION_HOLD',last?.message);process.exitCode=1}

@@ -23,9 +23,10 @@ const run=code=>vm.runInContext(code,sandbox),pass=(v,n)=>{assert.ok(v,n);consol
  pass(run("findWallMatches(aRows,bRows,'bid',70000).length===1&&Math.abs(findWallMatches(aRows,bRows,'bid',70000)[0].p-70041)<1"),'comparison includes nonlargest matched levels');
  pass(run("findWallMatches(aRows,bRows,'bid',70000).every(x=>x.dist<=Math.max(10,70000*.00035))"),'adaptive tolerance');
  const t=Math.floor(Date.now()/300000)*300000;sandbox.mockSeries=[{timestamp:String(t-600000),openInterest:'1000'},{timestamp:String(t),openInterest:'1100'}];
- run("req=async()=>({retCode:0,result:{list:mockSeries}});state.tf='5'");
+ sandbox.mockKline=[[String(t-300000),'70000','70200','69900','70100']];
+ run("req=async u=>({retCode:0,result:{list:u.includes('/kline')?mockKline:mockSeries}});state.tf='5'");
  await run('getOiSeries()');
- pass(el('oiWindowDelta').textContent==='—'&&el('oiWindowStamp').textContent.includes('huecos'),'OI gap gets no delta');
+ pass(el('oiWindowDelta').textContent==='—'&&el('oiWindowStamp').textContent.includes('no consecutivas'),'OI gap gets no delta');
  sandbox.mockSeries=[{timestamp:String(t-300000),openInterest:'1000'},{timestamp:String(t),openInterest:'1100'}];
  await run('getOiSeries()');
  pass(el('oiWindowDelta').textContent.includes('10.00%'),'consecutive OI delta shown');

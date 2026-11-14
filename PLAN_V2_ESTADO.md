@@ -4,14 +4,16 @@
 
 **Regla:** VERDE = modificación implementada, probada y publicada; ROJO = pendiente (incluye trabajos parciales). No atribuir precisión predictiva a señales descriptivas.
 
-**Bloque A1:** pruebas automatizadas: `node tests/v2_precision.test.cjs` (11 casos). Comprobación integrada adicional con navegador 390×844 y fuentes públicas reales. Esta lista se actualizará cuando se publique cada bloque.
+**Bloque A1:** publicado en commit `6ae0a81`; pruebas automatizadas originales, comprobación móvil real 390×844. No reabrirlo sin motivo técnico.
+
+**Bloque A2:** controles de velas Bybit cerradas y OI consecutivo alineados en 5m/15m/30m/1h/4h; agrupación de liquidez por bandas, clasificación relativa tamaño/persistencia/distancia y separación de precio en vivo entre exchanges. Pruebas específicas: `node tests/v2_a2_alignment_zones.test.cjs` (35 casos) y `node tests/v2_a2_mobile_live.cjs` (navegador móvil con fuentes reales).
 
 ## Libro de órdenes y bloqueos
-- 🔴 01 Agrupar liquidez por zonas contiguas.
+- 🟢 01 Agrupar liquidez en bandas contiguas próximas por lado, sumando importes visibles de Bybit sin tratarlos como una orden única. Rangos y umbrales visibles en pantalla.
 - 🔴 02 Medir cambios de volumen de muros.
 - 🔴 03 Reconocer apariciones repetidas.
-- 🔴 04 Umbrales relativos al libro.
-- 🔴 05 Priorizar muros por tamaño, persistencia y proximidad de manera calibrada.
+- 🔴 04 Umbrales relativos al libro para todos los detectores. **Parcial:** la clasificación de zonas agrupadas ya usa una mediana del importe de niveles visibles y suelo US$180.000, pero los detectores individuales siguen con umbrales fijos.
+- 🟢 05 Prioridad relativa de muros y zonas mediante tamaño, permanencia observada y distancia al precio; índice comparativo, nunca probabilidad de resistencia.
 
 ## Mapa de calor
 - 🔴 06 Escala de precios adaptable.
@@ -35,7 +37,7 @@
 - 🔴 20 Deduplicación y orden temporal de eventos.
 
 ## OI, funding y sentimiento
-- 🔴 21 Alineación temporal completa entre precio y OI. **Avance comprobado:** el historial OI ya no convierte huecos de 5 min en incrementos, ni muestra porcentajes sobre registros no consecutivos o atrasados; queda pendiente validar la alineación completa con el precio.
+- 🟢 21 Comparación precio–OI con dos muestras consecutivas de OI y vela Bybit cerrada exactamente correspondiente, comprobada en 5m/15m/30m/1h/4h. Se rechazan velas abiertas, huecos, resultados atrasados o de otro exchange; zonas hipotéticas históricas también ancladas a intervalos cerrados. Datos descriptivos, no inferencia causal.
 - 🔴 22 Calibración de cambios relevantes de OI.
 - 🔴 23 Semántica de funding actual/pagado/futuro.
 - 🔴 24 Interpretación conjunta del sentimiento horario.
@@ -62,4 +64,4 @@
 - 🔴 39 Validación prolongada de sesiones Android.
 - 🔴 40 Comprobación automática de publicación.
 
-**Estado tras A1:** 4 ítems completamente terminados / 40 propuestos; 36 pendientes, uno (#21) parcialmente mejorado pero aún ROJO. Los ítems no finalizados no se consideran aprobados por el simple hecho de que exista alguna función parecida en V1.
+**Estado tras A2:** 7 ítems completamente terminados / 40 propuestos (17,5%); 33 pendientes. El ítem #04 es parcial y permanece ROJO. Los avances se marcarán verdes únicamente tras publicación y verificación. No se considera que una puntuación de prioridad sea probabilidad de éxito.

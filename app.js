@@ -190,6 +190,7 @@ function model(){
   {kind:'zone',side:z.side,price:z.level,amount:z.weight,baseline:1,eventId:z.side+':'+Math.round(z.level/step),source:'Modelo hipotético OI; no liquidación real'})}
 }
 function draw(){
+ if(foldClosed('heat')){recordSkipped();return}
  const canvas=$('heat'),rect=canvas.parentElement.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2),w=Math.max(250,rect.width),h=Math.max(240,rect.height);
  canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
  const c=canvas.getContext('2d');c.scale(dpr,dpr);c.fillStyle='#0b1425';c.fillRect(0,0,w,h);
@@ -227,9 +228,10 @@ function activeBybitCandle(now=Date.now()){
  const start=Math.floor(now/(Number(state.tf)*60000))*(Number(state.tf)*60000);
  return state.candles.find(c=>Number(c[0])===start&&Number(c[1])>0)||null;
 }
-function renderPrice(){if(!state.price)return;$('price').textContent=usd(state.price);$('lastTick').textContent='Última operación: '+time(state.lastPriceAt);$('clock').textContent='Ahora '+time(Date.now());$('priceDelta').textContent=state.priceAtFirst?pct((state.price/state.priceAtFirst-1)*100):'—';const c=activeBybitCandle();$('change').textContent=c?pct((state.price/Number(c[1])-1)*100):'—'}
+function renderPrice(){if(!bybitAlive()||!state.price||Date.now()-state.lastPriceAt>20000){$('price').textContent='—';return}$('price').textContent=usd(state.price);$('lastTick').textContent='Última operación: '+time(state.lastPriceAt);$('clock').textContent='Ahora '+time(Date.now());$('priceDelta').textContent=state.priceAtFirst?pct((state.price/state.priceAtFirst-1)*100):'—';const c=activeBybitCandle();$('change').textContent=c?pct((state.price/Number(c[1])-1)*100):'—'}
 
 function renderLiq(now=Date.now()){
+ if(foldClosed('liqLong')){recordSkipped('compute');return}
  const win90=liquidationWindow(90000,now),win5=liquidationWindow(300000,now);
  $('liqLong').textContent=usd(state.longLiq);$('liqShort').textContent=usd(state.shortLiq);
  $('liq90Detail').textContent='90 s · longs '+usd(win90.long)+' / shorts '+usd(win90.short)+
@@ -249,8 +251,9 @@ function renderLiq(now=Date.now()){
 }
 function wallAge(ms){let sec=Math.max(0,Math.floor(ms/1000));return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0')}
 function renderBook(){
+ if(foldClosed('walls')){recordSkipped('compute');return}
  const now=Date.now();
- if(now-state.lastBookAt>30000){
+ if(!bybitAlive()||now-state.lastBookAt>15000){
   $('bigBid').textContent='—';$('bigAsk').textContent='—';$('bidSize').textContent='—';$('askSize').textContent='—';
   $('walls').innerHTML='<tr><td colspan="4">Libro desconectado o caducado</td></tr>';
   $('wallSummary').textContent='Sin observaciones vigentes';
@@ -320,6 +323,7 @@ function heatIntensity(volume,scale){
 }
 function drawLiquidityHeat(){
  const canvas=$('liquidityHeat');if(!canvas)return;
+ if(foldClosed('liquidityHeat')){recordSkipped();pruneHeat();return}
  const now=Date.now();
  pruneHeat(now);
  if(document.hidden)return;
@@ -569,10 +573,19 @@ function sourceFreshness(now=Date.now()){
  ];
  return sources.map(x=>{
   let valid=x.ts>0&&now>=x.ts&&now-x.ts<=x.ttl;
+  if(x.name==='Precio BTCUSDT'||x.name==='Libro y mapa de calor')valid=valid&&bybitAlive();
+  if(x.name==='Libro comparativo')valid=valid&&!!(state.binanceWs&&state.binanceWs.readyState===1);
+  if(x.name==='Liquidaciones ejecutadas')valid=valid&&bybitAlive();
   if(x.sameHour)valid=valid&&state.hourlyWindowEnd===Math.floor(now/3600000)*3600000;
   if(x.name==='Funding histórico liquidado')valid=valid&&state.lastFundingAt>0;
   if(x.name==='Funding indicativo siguiente'&&state.fundingNextAt<=now)valid=false;
-  const status=x.noEvents?'Sin eventos observados':valid?'VIGENTE':x.ts?'ATRASADO':'SIN DATOS';
+  let status=valid?'VIGENTE':x.ts?'ATRASADO':'SIN DATOS';
+  if(x.name==='Liquidaciones ejecutadas'){
+   status=!bybitAlive()?'SIN CONEXIÓN':!x.ts?'SUSCRITO SIN EVENTOS':
+    now-x.ts>300000?'SIN EVENTOS RECIENTES':'EVENTO OBSERVADO';
+  }
+  if((x.name==='Precio BTCUSDT'||x.name==='Libro y mapa de calor')&&!bybitAlive())status='SIN CONEXIÓN';
+  if(x.name==='Libro comparativo'&&(!state.binanceWs||state.binanceWs.readyState!==1))status='SIN CONEXIÓN';
   const label=x.name+' · '+x.origin+' · '+status+
    (x.ts?' · dato '+dateTime(x.dated?x.ts:x.sameHour?state.hourlyWindowEnd:x.name==='Funding histórico liquidado'?state.lastFundingAt:x.ts):'');
   return {...x,status,label,valid}
@@ -645,7 +658,7 @@ function topSnapshot(now=Date.now()){
   {value:(state.fundingRate>=0?'+':'')+(state.fundingRate*100).toFixed(4)+'%',
    detail:'Indicativa próximo pago '+dateTime(state.fundingNextAt)+' · Bybit',valid:true}:
   {value:'Funding no vigente',detail:'Bybit tickers · esperando tasa y fecha del próximo pago',valid:false};
- const material=state.alerts.filter(a=>a.priority&&a.priority.rank>=2&&now-a.lastImportantAt<=600000&&now>=a.lastImportantAt)
+ const material=state.alerts.filter(a=>a.priority&&a.priority.rank>=2&&a.lastImportantAt>=state.sessionStart&&now-a.lastImportantAt<=600000&&now>=a.lastImportantAt)
   .sort((a,b)=>b.priority.rank-a.priority.rank||b.lastImportantAt-a.lastImportantAt)[0]||null;
  return {price,flow:flowData,oi,funding,material}
 }
@@ -697,7 +710,11 @@ function initFolds(){
     requestAnimationFrame(()=>{
      if(panel.querySelector('#heat'))draw();
      if(panel.querySelector('#liquidityHeat'))drawLiquidityHeat();
-     if(panel.querySelector('#oiChart'))drawOiSeries()
+     if(panel.querySelector('#oiChart'))drawOiSeries();
+     if(panel.querySelector('#walls'))renderBook();
+     if(panel.querySelector('#buyVol'))renderTrades();
+     if(panel.querySelector('#liqLong'))renderLiq();
+     if(panel.querySelector('#marketSummary'))renderMarketSummary()
     })
    }
    const updated={};
@@ -709,6 +726,7 @@ function initFolds(){
 
 function renderMarketSummary(now=Date.now()){
  if(!$('marketSummary'))return;
+ if(foldClosed('marketSummary')){recordSkipped('compute');return}
  if(!state.wsOk||now-state.lastPriceAt>20000){
   $('marketSummary').textContent='Esperando operaciones en vivo para describir el mercado.';
   $('summaryStamp').textContent='Datos insuficientes';
@@ -1214,6 +1232,7 @@ function renderFlowStatus(now=Date.now()){
 
 
 function renderTrades(){
+ if(foldClosed('buyVol')){recordSkipped('compute');trimObservedFlows();return}
  const now=Date.now();trimObservedFlows(now);
  const w=flowWindow(tradesWithin(300000,now)),large=state.whales.filter(t=>now-t.ts>=0&&now-t.ts<300000)
   .sort((a,b)=>b.ts-a.ts);
@@ -1297,6 +1316,7 @@ function onBook(d){
   }
  }
  state.lastBookAt=now;
+ if(d.type==='snapshot'||a.u===1)renderRuntimeHealth(now);
  // Recalibrate only after the completed snapshot, or every five seconds for deltas.
  if(d.type==='snapshot'||a.u===1||!state.wallPolicy||now-state.wallPolicy.at>=5000){
   state.wallPolicy=null;
@@ -1348,6 +1368,82 @@ function normalizeBookRows(rows,descending){
   .filter(x=>x.p>0&&x.q>0&&Number.isFinite(x.p)&&Number.isFinite(x.q))
   .sort((a,b)=>descending?b.p-a.p:a.p-b.p).slice(0,20)
 }
+
+const HEALTH={book:15000,trade:35000,binance:14000};
+state.bybitRetry=null;state.bybitReconnections=0;state.binanceReconnections=0;
+state.lastBybitOpenAt=0;state.lastBinanceOpenAt=0;state.streamGaps=0;
+state.hiddenComputeSkipped=0;state.hiddenDrawSkipped=0;
+function foldClosed(id){
+ const el=$(id),fold=el?.closest?.('details.foldable');
+ return !!(document.hidden||(fold&&!fold.open))
+}
+function recordSkipped(kind='draw'){
+ if(kind==='draw')state.hiddenDrawSkipped++;else state.hiddenComputeSkipped++
+}
+function safeVisibleCall(fn){if(!document.hidden)fn()}
+function bybitAlive(){return !!(state.ws&&state.ws.readyState===1&&state.wsOk)}
+function clearBybitLive(reason='reconexión'){
+ state.wsOk=false;state.liqOk=false;state.price=0;state.lastPriceAt=0;
+ state.lastBookAt=0;state.lastTradeEventTs=0;state.lastTradeSeq=-1;
+ state.lastBybitOpenAt=0;state.sessionStart=Date.now();state.sessionCvd=0;
+ state.trades=[];state.whales=[];state.liq=[];state.longLiq=0;state.shortLiq=0;
+ state.tradeIds.clear();state.liqFingerprints.clear();state.printPolicyCache=null;
+ state.tradeWindowTruncated=false;state.liqWindowTruncated=false;state.priceAtFirst=0;
+ state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();
+ state.wallPolicy=null;state.wallDisappeared.clear();state.zoneSeen.clear();
+ state.heatSamples=[];state.lastHeatAt=0;
+ resetLiveAlertGrouping();resetComparisonPersistence();resetWallTracking();
+ $('price').textContent='—';$('lastTick').textContent='Precio no vigente · '+reason;
+ $('connection').textContent='SIN CONEXIÓN';$('connection').className='pill warn';
+ $('liqLong').textContent='—';$('liqShort').textContent='—';
+ $('buyVol').textContent='—';$('sellVol').textContent='—';$('cvd').textContent='—';
+ status('bybitStatus','Esperando nueva captura',false);
+ status('liqStatus','Suscripción interrumpida',false);
+ renderTopSnapshot(Date.now(),true);renderRuntimeHealth()
+}
+function retryBybit(){
+ if(state.bybitRetry)return;
+ const delay=Math.min(20000,3000*Math.pow(2,Math.min(3,state.bybitReconnections)));
+ state.bybitRetry=setTimeout(()=>{
+  state.bybitRetry=null;if(!document.hidden)connectBybit()
+ },delay)
+}
+function renderRuntimeHealth(now=Date.now()){
+ const target=$('runtimeHealth');if(!target)return;
+ const age=ts=>ts?Math.max(0,Math.round((now-ts)/1000))+' s':'sin eventos';
+ const bybit=bybitAlive();
+ target.textContent='Operaciones Bybit '+(bybit&&now-state.lastPriceAt<=20000?'vigentes':'sin datos vigentes')+
+  ' ('+age(state.lastPriceAt)+') · libro Bybit '+(bybit&&now-state.lastBookAt<=15000?'vigente':'sin datos vigentes')+
+  ' ('+age(state.lastBookAt)+') · Binance '+(state.binanceWs?.readyState===1&&now-state.binanceLastAt<=14000?'vigente':'sin datos vigentes')+
+  ' ('+age(state.binanceLastAt)+') · liquidaciones '+(bybit?(state.lastLiqAt?'último evento '+age(state.lastLiqAt):'suscrito, sin eventos'):'no suscrito')+
+  ' · reinicios Bybit '+state.bybitReconnections+' / Binance '+state.binanceReconnections+
+  ' · interrupciones no reconstruidas '+state.streamGaps+
+  ' · dibujos omitidos al plegar '+state.hiddenDrawSkipped;
+}
+function monitorStreams(now=Date.now()){
+ if(document.hidden)return;
+ const ws=state.ws;
+ if(ws&&ws.readyState===1){
+  const age=now-(state.lastBybitOpenAt||now);
+  if(age>HEALTH.book&&now-state.lastBookAt>HEALTH.book){
+   status('bybitStatus','Libro detenido · reconectando',false);
+   try{ws.close()}catch{}
+  }else if(age>HEALTH.trade&&now-state.lastPriceAt>HEALTH.trade){
+   status('bybitStatus','Operaciones detenidas · reconectando',false);
+   try{ws.close()}catch{}
+  }
+ }else if(!ws||ws.readyState===3){retryBybit()}
+ const bw=state.binanceWs;
+ if(bw&&bw.readyState===1&&now-state.lastBinanceOpenAt>HEALTH.binance&&now-state.binanceLastAt>HEALTH.binance){
+  $('binanceStatus').textContent='Libro detenido · reconectando';
+  try{bw.close()}catch{}
+ }else if(!bw||bw.readyState===3){
+  if(!state.binanceReconn)state.binanceReconn=setTimeout(()=>{
+   state.binanceReconn=null;connectBinance()
+  },6000)
+ }
+}
+
 function onBinanceBook(msg,now=Date.now()){
  if(msg.e!=='depthUpdate'||msg.s!=='BTCUSDT'||!Array.isArray(msg.b)||!Array.isArray(msg.a))return;
  const bids=normalizeBookRows(msg.b,true),asks=normalizeBookRows(msg.a,false);
@@ -1355,20 +1451,39 @@ function onBinanceBook(msg,now=Date.now()){
  state.binanceBids=bids;state.binanceAsks=asks;state.binanceLastAt=now;
  if(now-state.lastCompareAt>1000){state.lastCompareAt=now;renderExchangeComparison(now)}
 }
+
 function connectBinance(){
+ if(state.binanceWs&&(state.binanceWs.readyState===0||state.binanceWs.readyState===1))return;
  if(state.binanceReconn){clearTimeout(state.binanceReconn);state.binanceReconn=null}
  let socket;
  try{socket=new WebSocket('wss://fstream.binance.com/ws/btcusdt@depth20@500ms')}
- catch(e){$('binanceStatus').textContent='No disponible';state.binanceReconn=setTimeout(connectBinance,10000);return}
+ catch(e){
+  $('binanceStatus').textContent='No disponible';
+  state.binanceReconn=setTimeout(()=>{state.binanceReconn=null;connectBinance()},9000);return
+ }
  state.binanceWs=socket;
- socket.onopen=()=>{$('binanceStatus').textContent='Conectado · esperando libro'};
- socket.onmessage=e=>{try{onBinanceBook(JSON.parse(e.data))}catch(err){console.warn('Binance depth',err.message)}};
- socket.onerror=()=>{$('binanceStatus').textContent='Error de conexión'};
+ socket.onopen=()=>{
+  if(state.binanceWs!==socket)return;
+  state.lastBinanceOpenAt=Date.now();
+  $('binanceStatus').textContent='Suscrito · esperando libro'
+ };
+ socket.onmessage=e=>{
+  if(state.binanceWs!==socket)return;
+  try{onBinanceBook(JSON.parse(e.data))}catch(err){console.warn('Binance depth',err.message)}
+ };
+ socket.onerror=()=>{
+  if(state.binanceWs!==socket)return;
+  $('binanceStatus').textContent='Error de conexión';
+  try{socket.close()}catch{}
+ };
  socket.onclose=()=>{
   if(state.binanceWs!==socket)return;
-  state.binanceBids=[];state.binanceAsks=[];state.binanceLastAt=0;resetComparisonPersistence();
+  state.binanceBids=[];state.binanceAsks=[];state.binanceLastAt=0;
+  resetComparisonPersistence();state.binanceReconnections++;
   $('binanceStatus').textContent='Reconectando';renderExchangeComparison();
-  if(!state.binanceReconn)state.binanceReconn=setTimeout(connectBinance,9000)
+  if(!state.binanceReconn)state.binanceReconn=setTimeout(()=>{
+   state.binanceReconn=null;if(!document.hidden)connectBinance()
+  },9000)
  }
 }
 function bestComparisonLevels(book,side){
@@ -1520,7 +1635,47 @@ function renderExchangeComparison(now=Date.now()){
   'Sin niveles ≥US$100.000 en cada mercado a profundidad relativa comparable (máximo 2 por lado). No se suman importes entre exchanges.'
 }
 
-function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetLiveAlertGrouping();resetComparisonPersistence();resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.wallDisappeared.clear();state.wallPolicy=null;state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
+
+function connectBybit(){
+ if(state.ws&&(state.ws.readyState===0||state.ws.readyState===1))return;
+ if(state.bybitRetry){clearTimeout(state.bybitRetry);state.bybitRetry=null}
+ let ws;
+ try{ws=new WebSocket('wss://stream.bybit.com/v5/public/linear')}
+ catch(err){status('bybitStatus','Conexión no disponible',false);retryBybit();return}
+ state.ws=ws;
+ ws.onopen=()=>{
+  if(state.ws!==ws)return;
+  state.lastBybitOpenAt=Date.now();state.wsOk=true;state.liqOk=true;
+  status('bybitStatus','Suscrito · esperando libro y operaciones',true);
+  status('liqStatus','Suscrito · sin eventos observados',true);
+  $('error').textContent='';renderRuntimeHealth();
+  ws.send(JSON.stringify({op:'subscribe',args:[
+   'publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}))
+ };
+ ws.onmessage=e=>{
+  if(state.ws!==ws)return;
+  let d;try{d=JSON.parse(e.data)}catch{return}
+  if(!d.topic)return;
+  if(d.topic.startsWith('publicTrade.'))onTrade(d);
+  else if(d.topic.startsWith('orderbook.'))onBook(d);
+  else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)
+ };
+ ws.onerror=()=>{
+  if(state.ws!==ws)return;
+  status('bybitStatus','Error · reconectando',false);
+  try{ws.close()}catch{}
+ };
+ ws.onclose=()=>{
+  if(state.ws!==ws)return;
+  state.ws=null;state.bybitReconnections++;state.streamGaps++;
+  clearBybitLive('conexión Bybit interrumpida; no se reconstruyen intervalos');
+  retryBybit()
+ };
+ if(state.pingTimer)clearInterval(state.pingTimer);
+ state.pingTimer=setInterval(()=>{
+  if(state.ws===ws&&ws.readyState===1)try{ws.send(JSON.stringify({op:'ping'}))}catch{}
+ },20000)
+}
 async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
 async function getOi(){// Public sources, no credentials, no simulated fallback.
 const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent=p.name+' REST BTCUSDT · consultado '+dateTime(state.lastOiAt)+' · OI en BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}
@@ -1584,6 +1739,7 @@ function alignPriceOi(points,candles,periodMs,now=Date.now()){
 }
 
 function drawOiSeries(){
+ if(foldClosed('oiChart')){recordSkipped();return}
  const cvas=$('oiChart'),box=cvas.parentElement,rect=box.getBoundingClientRect(),w=Math.max(230,rect.width),h=Math.max(110,rect.height),dpr=Math.min(devicePixelRatio||1,2);
  cvas.width=Math.round(w*dpr);cvas.height=Math.round(h*dpr);
  const ctx=cvas.getContext('2d');ctx.scale(dpr,dpr);
@@ -1778,4 +1934,11 @@ async function getHourlySentiment(){
   }else $('hourlySentimentStamp').textContent='Última lectura '+dateTime(end)+' · no se pudo refrescar';
  }finally{state.hourlyInFlight=false;renderSourceFreshness()}
 }
-function init(){initFolds();tabs();restore();renderTopSnapshot(Date.now(),true);$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getOfficialFearGreed,3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);renderTopSnapshot(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getHourlySentiment();getOfficialFearGreed();getOi();getCandles();if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();
+function init(){initFolds();tabs();restore();renderTopSnapshot(Date.now(),true);$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(()=>safeVisibleCall(getOiSeries),60000);setInterval(()=>safeVisibleCall(getAccountRatio),60000);setInterval(()=>safeVisibleCall(getFunding),120000);setInterval(()=>safeVisibleCall(getOfficialFearGreed),3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(()=>safeVisibleCall(getHistory),300000);setInterval(()=>safeVisibleCall(getOi),60000);setInterval(()=>safeVisibleCall(getCandles),60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();monitorStreams(now);if(document.hidden)return;$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);renderTopSnapshot(now);renderRuntimeHealth(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){
+   monitorStreams();
+   if(!state.ws||state.ws.readyState===3)connectBybit();
+   getHourlySentiment();getOfficialFearGreed();getOi();getCandles();
+   if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();
+   getAccountRatio();getFunding();getOiSeries();drawLiquidityHeat();
+   if(state.ws&&state.ws.readyState===1)try{state.ws.send(JSON.stringify({op:'ping'}))}catch{}
+  }});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();

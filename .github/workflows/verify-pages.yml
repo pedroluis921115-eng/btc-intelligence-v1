@@ -1,0 +1,22 @@
+name: Verify BTC Intelligence Pages deployment
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: read
+jobs:
+  public-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Pages SHA and public HTML/JS/SW/plan
+        run: node scripts/verify-deploy.mjs
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}

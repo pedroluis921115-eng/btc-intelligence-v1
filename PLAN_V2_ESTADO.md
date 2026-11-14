@@ -12,6 +12,8 @@
 
 **Bloque B — mapa de calor (14/11/2026):** escala vertical adaptable a los precios absolutos de las muestras y al precio actual; agrupación temporal de libros sin proyectar cantidades antiguas sobre precios nuevos; bandas compras/ventas simultáneas; intensidad relativa logarítmica con percentil 90; marcas de hora local y huecos sin interpolar; compresión por precio, 160 buckets por lado, máximo 72 muestras/6 minutos, no capturar cuando la página está oculta, transformaciones de canvas sin escalados acumulativos y reutilización de dimensiones. Pruebas: `node tests/v2_heatmap.test.cjs` (20 casos) y `node tests/v2_heatmap_mobile.cjs` (390×844 con Bybit/otros componentes reales). No se ha medido duración de batería ni validado Android prolongadamente; #39 continúa ROJO.
 
+**Bloque C — rupturas (14/11/2026):** #12 cruce de operaciones separado del cierre confirmado/rechazado de una vela Bybit cerrada en el marco elegido (se exige la vela siguiente; si hay fallback Binance, no se confirma); #13 retesteo observado con prueba de acercamiento al nivel y reacción posterior sin confundirlo con cierre; #14 umbral de desplazamiento relativo al rango medio de 3–4 velas cerradas, acotado entre 0,04% y 0,35%, bloqueado si falta evidencia; #15 deduplicación de cruces cercanos de la misma dirección durante 5 minutos por tolerancia relativa al precio y al umbral, con historial limitado y contadores de suprimidos. Pruebas focales: `node tests/v2_breakouts_c.test.cjs` (27 casos). Integración: `node tests/v2_breakouts_mobile.cjs` (390×844, 5 temporalidades, feeds Bybit/Binance, 0 errores JavaScript). Las comprobaciones de cierre y retesteo se hicieron también con eventos simulados; **no se valida todavía fiabilidad predictiva ni sesiones prolongadas**.
+
 ## Libro de órdenes y bloqueos
 - 🟢 01 Agrupar liquidez en bandas contiguas próximas por lado, sumando importes visibles de Bybit sin tratarlos como una orden única. Rangos y umbrales visibles en pantalla.
 - 🟢 02 Registrar incrementos y reducciones relevantes de liquidez visible, importes antes/después y acumulados observados por nivel, con historial limitado y panel de evolución.
@@ -28,10 +30,10 @@
 
 ## Rupturas
 - 🟢 11 No atribuir rupturas a muros eliminados o reducidos bajo el umbral. Incluye seguimiento de antigüedad de *importe suficiente* y preservación de claves exactas de precio del exchange.
-- 🔴 12 Diferenciar cruce de cierre de vela.
-- 🔴 13 Seguimiento de retesteo de nivel.
-- 🔴 14 Umbral ajustado a volatilidad.
-- 🔴 15 Deduplicación avanzada de movimientos.
+- 🟢 12 Separa cruce intravela de vela Bybit realmente cerrada, con estado independiente confirmado/rechazado/pendiente/no verificable y temporalidad fijada al cruzar.
+- 🟢 13 Sigue acercamiento al nivel cruzado y reacción posterior durante 4 minutos; muestra retesteo pendiente, tocado, rebote observado, fallido o no verificable tras desconexión. Es lectura descriptiva, no predicción.
+- 🟢 14 Usa rango relativo medio de 3–4 velas Bybit CERRADAS del marco elegido, umbral acotado entre 0,04% y 0,35%; si no hay velas válidas no se crean cruces y no se usa Binance como respaldo para confirmación.
+- 🟢 15 Agrupa cruces del mismo lado y precios cercanos en ventana de 5 min con tolerancia relativa a precio y umbral, sin suprimir niveles alejados; prioridad al muro activo mayor, contador de duplicados y memoria acotada.
 
 ## Grandes operaciones y liquidaciones
 - 🔴 16 Secuencias frente a transacciones aisladas.
@@ -68,4 +70,4 @@
 - 🔴 39 Validación prolongada de sesiones Android.
 - 🔴 40 Comprobación automática de publicación.
 
-**Estado tras Bloque B:** 15 ítems completamente terminados / 40 propuestos (37,5%); 25 pendientes. Verde = función implementada, probada y publicada. No se confunden tests de lógica o navegador móvil con validación prolongada de rendimiento/batería (#39, ROJO).
+**Estado tras Bloque C:** 19 ítems completamente terminados / 40 propuestos (47,5%); 21 pendientes. Los estados verdes indican implementación, pruebas focales y publicación, **no** acierto predictivo. Pruebas de mercado prolongadas, reconexión completa y rendimiento Android (#35, #39) siguen ROJAS.

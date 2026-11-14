@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],breakoutSuppressed:0,lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
 const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function model(){
@@ -621,39 +621,135 @@ function isTrackedWallPresent(watch,now=Date.now()){
  return Number.isFinite(qty)&&qty*watch.level>=wallThreshold(watch.side,now)&&Number.isFinite(since)&&now-since>=WALL_MIN_AGE;
 }
 
-function checkBreakouts(now=Date.now()){
- if(!state.wsOk||now-state.lastPriceAt>18000||!state.price)return;
- for(const evt of state.breakouts){
-  if(evt.status!=='pending')continue;
-  const elapsed=now-evt.ts;
-  const restored=evt.side==='bid'?state.price>evt.level*1.00035:state.price<evt.level*.99965;
-  const sustained=evt.side==='bid'?state.price<evt.level*.99975:state.price>evt.level*1.00025;
-  if(restored&&elapsed>=8000){evt.status='returned';evt.resolved=now;evt.last=state.price}
-  else if(elapsed>=45000&&sustained){evt.status='sustained';evt.resolved=now;evt.last=state.price}
-  else if(elapsed>=90000){evt.status='uncertain';evt.resolved=now;evt.last=state.price}
+
+// Breakout observations use Bybit price candles of the selected timeframe only.
+// A tick crossing is NOT a candle-close confirmation or a profitable signal.
+function breakoutVolatility(now=Date.now()){
+ const tf=state.tf,period=Number(tf)*60000;
+ if(state.candleSource!=='Bybit'||state.candlesTf!==tf||!Number.isFinite(period)||period<=0)return null;
+ const expectedLast=Math.floor(now/period)*period-period;
+ const closed=state.candles.filter(k=>Array.isArray(k)&&Number(k[0])+period<=now&&Number(k[0])>=expectedLast-4*period)
+  .sort((a,b)=>Number(b[0])-Number(a[0]));
+ if(closed.length<3||Number(closed[0][0])!==expectedLast||!state.candles.some(k=>Number(k[0])>=expectedLast+period))return null;
+ const ranges=closed.slice(0,4).map(k=>{
+  const high=Number(k[2]),low=Number(k[3]),close=Number(k[4]);
+  return high>=low&&low>0&&close>0?(high-low)/close*100:NaN
+ });
+ if(ranges.length<3||ranges.some(v=>!Number.isFinite(v)))return null;
+ const rangePct=ranges.reduce((a,b)=>a+b,0)/ranges.length;
+ // Move threshold is a small fraction of recent closed candle range (4-35 bp).
+ const movePct=Math.min(.35,Math.max(.04,rangePct*.32));
+ return {tf,period,rangePct,movePct,ts:expectedLast+period}
+}
+function breakoutSignedDistance(evt,price){
+ return (evt.side==='bid'?-1:1)*(price-evt.level)
+}
+function breakoutDuplicate(side,level,now,thresholdUsd){
+ return state.breakouts.some(e=>e.side===side&&now-e.ts<300000&&now>=e.ts&&
+  Math.abs(e.level-level)<=Math.max(10,level*.0006,thresholdUsd*1.5,e.thresholdUsd||0))
+}
+function updateBreakoutCandles(now=Date.now()){
+ for(const e of state.breakouts){
+  if(e.candle!=='awaiting')continue;
+  const period=Number(e.tf)*60000;
+  if(!(period>0))continue;
+  const start=Math.floor(e.ts/period)*period,end=start+period;
+  if(now<end)continue;
+  // Using selected timeframe data; never interpret a Binance fallback as Bybit.
+  if(state.candlesTf!==e.tf||state.candleSource!=='Bybit'){
+   if(now-end>Math.max(period,600000))e.candle='unavailable';
+   continue
+  }
+  const nextCandleExists=state.candles.some(k=>Number(k[0])>=end);
+  const row=nextCandleExists?state.candles.find(k=>Number(k[0])===start):null;
+  if(!row){if(now-end>Math.max(period,600000))e.candle='unavailable';continue}
+  const close=Number(row[4]);
+  if(!(close>0&&Number.isFinite(close))){e.candle='unavailable';continue}
+  e.candleClose=close;e.candleAt=end;
+  e.candle=breakoutSignedDistance(e,close)>=e.thresholdUsd*.5?'confirmed':'rejected'
  }
- for(const watch of state.wallWatch.values()){
+}
+function updateRetest(e,now=Date.now()){
+ if(e.retest==='held'||e.retest==='failed'||e.retest==='expired')return;
+ if(now-e.ts>240000){e.retest='expired';return}
+ if(now-e.ts<5000)return;
+ const dist=breakoutSignedDistance(e,state.price),band=e.thresholdUsd*.75;
+ if(e.retest==='waiting'){
+  // Price approaches the pre-cross level from the broken side.
+  if(Math.abs(dist)<=band){e.retest='touched';e.retestAt=now}
+ }else if(e.retest==='touched'){
+  if(dist< -e.thresholdUsd*.6){e.retest='failed';e.retestResolved=now}
+  else if(now-e.retestAt>=15000&&dist>=e.thresholdUsd*1.10){
+   e.retest='held';e.retestResolved=now
+  }
+ }
+}
+function checkBreakouts(now=Date.now()){
+ updateBreakoutCandles(now);
+ if(!state.wsOk||now-state.lastPriceAt>18000||!state.price||now-state.lastBookAt>8000)return;
+ const volatility=breakoutVolatility(now);
+ for(const evt of state.breakouts){
+  if(evt.status==='pending'){
+   const elapsed=now-evt.ts,dist=breakoutSignedDistance(evt,state.price);
+   if(dist<=-evt.thresholdUsd*.8&&elapsed>=8000){evt.status='returned';evt.resolved=now;evt.last=state.price}
+   else if(elapsed>=45000&&dist>=evt.thresholdUsd*.55){evt.status='sustained';evt.resolved=now;evt.last=state.price}
+   else if(elapsed>=90000){evt.status='uncertain';evt.resolved=now;evt.last=state.price}
+  }
+  updateRetest(evt,now)
+ }
+ if(!volatility)return;
+ const watches=[...state.wallWatch.values()].sort((a,b)=>{
+  const notional=w=>Number((w.side==='bid'?state.bids:state.asks).get(w.key.slice(2))||0)*w.level;
+  return notional(b)-notional(a)
+ });
+ for(const watch of watches){
   if(!isTrackedWallPresent(watch,now)){state.wallWatch.delete(watch.key);continue}
   if(watch.done||now-watch.armedAt<2500)continue;
-  const broken=watch.side==='bid'?state.price<watch.level*.99965:state.price>watch.level*1.00035;
-  if(!broken)continue;
+  const thresholdUsd=watch.level*volatility.movePct/100;
+  const dist=watch.side==='bid'?watch.level-state.price:state.price-watch.level;
+  if(dist<thresholdUsd)continue;
   watch.done=true;
-  if(state.breakouts.some(e=>e.side===watch.side&&Math.abs(e.level-watch.level)<1&&now-e.ts<180000))continue;
-  const evt={ts:now,side:watch.side,level:watch.level,status:'pending',resolved:0,last:state.price};
-  state.breakouts.unshift(evt);state.breakouts=state.breakouts.slice(0,10)
+  if(breakoutDuplicate(watch.side,watch.level,now,thresholdUsd)){
+   state.breakoutSuppressed++;continue
+  }
+  const evt={ts:now,side:watch.side,level:watch.level,status:'pending',resolved:0,last:state.price,
+   tf:volatility.tf,thresholdUsd,thresholdPct:volatility.movePct,candle:'awaiting',candleClose:null,candleAt:0,
+   retest:'waiting',retestAt:0,retestResolved:0};
+  state.breakouts.unshift(evt);state.breakouts=state.breakouts.slice(0,64)
  }
 }
 function renderBreakouts(now=Date.now()){
  const el=$('breakoutEvents');if(!el)return;
- if(!state.wsOk||now-state.lastPriceAt>18000){$('breakoutStamp').textContent='Sin operaciones recientes; detección pausada'}
- else $('breakoutStamp').textContent='Seguimiento de niveles observados antes del cruce · '+time(now);
- const names={pending:'Cruce en observación',returned:'Retorno al lado anterior (posible falsa ruptura)',sustained:'Cruce sostenido 45 s',uncertain:'Sin confirmación suficiente'};
- el.innerHTML=state.breakouts.filter(e=>now-e.ts<600000).slice(0,6).map(e=>
-  '<div class="alertrow"><span class="'+(e.side==='bid'?'down':'up')+'">'+(e.side==='bid'?'Cruce BAJISTA':'Cruce ALCISTA')+'</span> de '+usd(e.level)+' · '+time(e.ts)+'<div class="sub">'+names[e.status]+(e.resolved?' · '+time(e.resolved):'')+'</div></div>'
- ).join('')||'<div class="empty">No se han registrado cruces de muros previamente observados.</div>'
+ const volatility=breakoutVolatility(now);
+ if(!state.wsOk||now-state.lastPriceAt>18000||now-state.lastBookAt>8000){
+  $('breakoutStamp').textContent='Sin libro u operaciones recientes; detección pausada'
+ }else if(!volatility){
+  $('breakoutStamp').textContent='Esperando 3–4 velas Bybit cerradas '+tfPeriod()+' para calcular umbral adaptable; no se generan cruces sin referencia'
+ }else{
+  $('breakoutStamp').textContent='Umbral de cruce '+volatility.movePct.toFixed(3)+'% (rango medio cerrado '+volatility.rangePct.toFixed(3)+
+   '% · '+tfPeriod()+') · cruces cercanos omitidos: '+state.breakoutSuppressed+' · '+time(now)
+ }
+ const openClosures=state.breakouts.filter(e=>e.candle==='awaiting'&&now-e.ts<Math.max(900000,Number(e.tf)*60000+1800000)).length;
+ const names={pending:'Cruce de precio en seguimiento',returned:'Precio volvió al lado anterior',sustained:'Precio al otro lado ≥45 s (sin confirmar cierre)',uncertain:'Sin continuidad suficiente'};
+ const candleNames={awaiting:'Cierre de vela pendiente',confirmed:'Cierre de vela confirmado más allá del nivel',rejected:'Cierre NO confirmó la ruptura',unavailable:'Cierre no verificable con datos Bybit'};
+ const retestNames={waiting:'Retesteo aún no observado',touched:'Retesteo observado; esperando reacción',held:'Rebote tras retesteo observado (solo precio)',failed:'Retesteo fallido: retorno al lado original',expired:'Retesteo no verificable (plazo o reconexión)'};
+ if(openClosures&&volatility)$('breakoutStamp').textContent+=' · cierres pendientes: '+openClosures;
+ const ordered=state.breakouts.filter(e=>now-e.ts>=0&&now-e.ts<Math.max(900000,Number(e.tf)*60000+1800000))
+  .sort((a,b)=>Number(b.candle==='awaiting')-Number(a.candle==='awaiting')||b.ts-a.ts);
+ el.innerHTML=ordered.slice(0,7).map(e=>
+  '<div class="alertrow"><span class="'+(e.side==='bid'?'down':'up')+'">'+(e.side==='bid'?'Cruce BAJISTA':'Cruce ALCISTA')+
+  '</span> de '+usd(e.level)+' · '+time(e.ts)+'<div class="sub">'+(names[e.status]||'Observación')+
+  ' · umbral '+Number(e.thresholdPct||0).toFixed(3)+'% · vela '+(e.tf==='60'?'1h':e.tf==='240'?'4h':e.tf+'m')+
+  '<div>'+ (candleNames[e.candle]||'Cierre pendiente')+(e.candleAt?' · '+time(e.candleAt):'')+'</div>'+
+  '<div>'+(retestNames[e.retest]||'Sin retesteo validado')+'</div></div></div>'
+ ).join('')||'<div class="empty">No se han registrado cruces válidos de muros previamente observados.</div>'
 }
+
 function resetWallTracking(){
- for(const e of state.breakouts)if(e.status==='pending'){e.status='uncertain';e.resolved=Date.now()}
+ for(const e of state.breakouts){
+  if(e.status==='pending'){e.status='uncertain';e.resolved=Date.now()}
+  if(e.retest==='waiting'||e.retest==='touched')e.retest='expired'
+ }
  state.wallWatch.clear();
 }
 
@@ -793,10 +889,10 @@ async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl
 async function getOi(){// Public sources, no credentials, no simulated fallback.
 const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent='Última lectura '+time(state.lastOiAt)+' · contratos BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}
 async function getCandles(){const tf=state.tf,request=++state.candlesRequest;
- const providers=[{name:'Bybit',url:`https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=${tf}&limit=4`,parse:d=>{if(d.retCode!==0)throw Error('Bybit error');return d.result.list}},{name:'Binance',url:`https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=${tf==='60'?'1h':tf==='240'?'4h':tf+'m'}&limit=4`,parse:d=>d.map(x=>[x[0],x[1],x[2],x[3],x[4]])}];
+ const providers=[{name:'Bybit',url:`https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=${tf}&limit=8`,parse:d=>{if(d.retCode!==0)throw Error('Bybit error');return d.result.list}},{name:'Binance',url:`https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=${tf==='60'?'1h':tf==='240'?'4h':tf+'m'}&limit=8`,parse:d=>d.map(x=>[x[0],x[1],x[2],x[3],x[4]])}];
  for(const source of providers){try{const d=await req(source.url),v=source.parse(d);
   if(tf!==state.tf||request!==state.candlesRequest)return;
-  if(Array.isArray(v)&&v.length){state.candles=v.sort((a,b)=>+b[0]-+a[0]);state.candlesTf=tf;state.candleSource=source.name;renderPrice();return}
+  if(Array.isArray(v)&&v.length){state.candles=v.sort((a,b)=>+b[0]-+a[0]);state.candlesTf=tf;state.candleSource=source.name;renderPrice();checkBreakouts();renderBreakouts();return}
  }catch(e){console.warn('kline '+source.name,e.message)}}
  if(tf!==state.tf||request!==state.candlesRequest)return;
  state.candles=[];state.candlesTf=tf;state.candleSource='';renderPrice()

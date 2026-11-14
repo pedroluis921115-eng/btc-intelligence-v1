@@ -1,6 +1,7 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,sessionStart:Date.now(),tradeIds:new Map(),liqFingerprints:new Map(),tradeDuplicates:0,liqDuplicates:0,tradeRejected:0,liqRejected:0,lastTradeEventTs:0,lastTradeSeq:-1,tradeWindowTruncated:false,liqWindowTruncated:false,printPolicyCache:null,lastFlowPrune:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],breakoutSuppressed:0,lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
-const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,sessionStart:Date.now(),tradeIds:new Map(),liqFingerprints:new Map(),tradeDuplicates:0,liqDuplicates:0,tradeRejected:0,liqRejected:0,lastTradeEventTs:0,lastTradeSeq:-1,tradeWindowTruncated:false,liqWindowTruncated:false,printPolicyCache:null,lastFlowPrune:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,lastFundingFetchedAt:0,fundingHistoryRequest:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],breakoutSuppressed:0,lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0,hourlyWindowEnd:0,oiRelevance:null};
+const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+const dateTime=ms=>new Date(ms).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function model(){
  const p=state.price,oi=state.oiHistory,candles=state.fiveCandles;
@@ -322,41 +323,52 @@ function renderAdvancedWhales(now=Date.now()){
 }
 const tfPeriod=()=>({'5':'5min','15':'15min','30':'30min','60':'1h','240':'4h'})[state.tf];
 const finiteNum=v=>v===null||v===undefined||v===''?null:Number.isFinite(Number(v))?Number(v):null;
+
 async function getFunding(){
- const now=Date.now();
+ const request=++state.fundingHistoryRequest,now=Date.now();
  const [current,history]=await Promise.allSettled([
   req('https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT'),
-  req('https://api.bybit.com/v5/market/funding/history?category=linear&symbol=BTCUSDT&limit=1')
+  req('https://api.bybit.com/v5/market/funding/history?category=linear&symbol=BTCUSDT&limit=2')
  ]);
+ if(request!==state.fundingHistoryRequest)return;
  if(current.status==='fulfilled'){
-  const d=current.value;
-  const row=d.retCode===0?d.result?.list?.[0]:null;
-  const value=finiteNum(row?.fundingRate),next=finiteNum(row?.nextFundingTime);
-  if(value!==null&&Math.abs(value)<.2&&next&&next>now-3600000){
-   state.fundingRate=value;state.fundingNextAt=next;state.fundingAt=now;
-   $('fundingCurrent').textContent=(value>=0?'+':'')+(value*100).toFixed(4)+'%';
-   $('fundingNext').textContent=time(next)+' · próximo evento';
+  const d=current.value,row=d.retCode===0?d.result?.list?.[0]:null;
+  const val=finiteNum(row?.fundingRate),next=finiteNum(row?.nextFundingTime);
+  if(val!==null&&Math.abs(val)<.2&&next&&next>now&&next<=now+86400000){
+   state.fundingRate=val;state.fundingNextAt=next;state.fundingAt=Date.now();
+   $('fundingCurrent').textContent=(val>=0?'+':'')+(val*100).toFixed(4)+'%';
+   $('fundingNext').textContent='Indicativa para '+dateTime(next)+' · Bybit tickers · consultada '+time(state.fundingAt)+
+    ' · puede variar antes del pago'
+  }else{
+   state.fundingRate=null;state.fundingAt=0;state.fundingNextAt=0;
+   $('fundingCurrent').textContent='—';$('fundingNext').textContent='Bybit tickers · tasa indicativa no disponible'
   }
+ }else{
+  state.fundingRate=null;state.fundingAt=0;state.fundingNextAt=0;
+  $('fundingCurrent').textContent='—';$('fundingNext').textContent='Bybit tickers · consulta fallida'
  }
  if(history.status==='fulfilled'){
-  const d=history.value;
-  const row=d.retCode===0?d.result?.list?.[0]:null;
+  const d=history.value,row=d.retCode===0?d.result?.list?.[0]:null;
   const val=finiteNum(row?.fundingRate),ts=finiteNum(row?.fundingRateTimestamp);
-  if(val!==null&&Math.abs(val)<.2&&ts&&ts<=now+300000){
-   state.lastFundingRate=val;state.lastFundingAt=ts;
-   $('fundingPrevious').textContent=(val>=0?'+':'')+(val*100).toFixed(4)+'% · '+time(ts)
+  if(val!==null&&Math.abs(val)<.2&&ts&&ts<=Date.now()&&Date.now()-ts<86400000){
+   state.lastFundingRate=val;state.lastFundingAt=ts;state.lastFundingFetchedAt=Date.now();
+   $('fundingPrevious').textContent=(val>=0?'+':'')+(val*100).toFixed(4)+'%';
+   $('fundingPreviousStamp').textContent='Liquidación histórica '+dateTime(ts)+' · Bybit funding/history · consultada '+time(state.lastFundingFetchedAt);
+  }else{
+   state.lastFundingRate=null;state.lastFundingAt=0;state.lastFundingFetchedAt=0;
+   $('fundingPrevious').textContent='—';$('fundingPreviousStamp').textContent='Bybit funding/history · último pago no verificable'
   }
+ }else{
+  state.lastFundingRate=null;state.lastFundingAt=0;state.lastFundingFetchedAt=0;
+  $('fundingPrevious').textContent='—';$('fundingPreviousStamp').textContent='Bybit funding/history · consulta fallida'
  }
- if(now-state.fundingAt>300000){
-  state.fundingRate=null;
-  $('fundingCurrent').textContent='—';
-  $('fundingNext').textContent='Financiación actual no disponible';
- }
- renderMarketSummary()
+ renderMarketSummary();renderSourceFreshness()
 }
 async function getAccountRatio(){
  const tf=state.tf,period=tfPeriod(),request=++state.ratioReq;
- if(state.ratioTf!==tf){state.ratioTf=tf;state.ratioLong=null;state.ratioShort=null;state.ratioAt=0}
+ if(state.ratioTf!==tf){state.ratioTf=tf;state.ratioLong=null;state.ratioShort=null;state.ratioAt=0;
+  $('accountLong').textContent='—';$('accountShort').textContent='—';
+  $('accountRatioStamp').textContent='Bybit · actualizando muestras '+period;}
  try{
   const d=await req('https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=BTCUSDT&period='+period+'&limit=2');
   const row=d.retCode===0?d.result?.list?.[0]:null;
@@ -366,7 +378,7 @@ async function getAccountRatio(){
   state.ratioLong=l;state.ratioShort=sh;state.ratioAt=ts;
   $('accountLong').textContent=(l*100).toFixed(1)+'%';
   $('accountShort').textContent=(sh*100).toFixed(1)+'%';
-  $('accountRatioStamp').textContent='Cuentas con posiciones · '+period+' · '+time(ts);
+  $('accountRatioStamp').textContent='Bybit REST · cuentas con posiciones · '+period+' · muestra '+dateTime(ts);
  }catch(e){
   if(request!==state.ratioReq||tf!==state.tf)return;
   state.ratioLong=null;state.ratioShort=null;state.ratioAt=0;
@@ -375,6 +387,68 @@ async function getAccountRatio(){
  }
  renderMarketSummary()
 }
+
+function sourceFreshness(now=Date.now()){
+ const min=60000,tf=Number(state.tf)*60000;
+ const sources=[
+  {name:'Precio BTCUSDT',origin:'Bybit WebSocket publicTrade',ts:state.lastPriceAt,ttl:20000},
+  {name:'Libro y mapa de calor',origin:'Bybit WebSocket orderbook.200',ts:state.lastBookAt,ttl:12000},
+  {name:'Libro comparativo',origin:'Binance USD-M depth20',ts:state.binanceLastAt,ttl:8000},
+  {name:'Liquidaciones ejecutadas',origin:'Bybit WebSocket allLiquidation',ts:state.lastLiqAt,ttl:300000,noEvents:state.wsOk&&state.lastLiqAt===0},
+  {name:'OI puntual',origin:state.oiSource?state.oiSource+' REST BTCUSDT':'REST',ts:state.lastOiAt,ttl:120000},
+  {name:'OI histórico + vela cerrada',origin:'Bybit REST OI/kline',ts:state.oiSeriesAt,ttl:Math.max(180000,tf*.5)},
+  {name:'Funding indicativo siguiente',origin:'Bybit REST tickers',ts:state.fundingAt,ttl:300000},
+  {name:'Funding histórico liquidado',origin:'Bybit REST funding/history',ts:state.lastFundingFetchedAt,ttl:600000},
+  {name:'Cuentas long/short',origin:'Bybit REST account-ratio',ts:state.ratioAt,ttl:Math.max(600000,tf*3)},
+  {name:'Miedo y Codicia diario',origin:'Alternative.me',ts:state.fngAt,ttl:36*3600000,dated:true},
+  {name:'Sentimiento BTC horario',origin:'Bybit REST kline/OI/account-ratio/tickers',ts:state.hourlyAt,ttl:Math.max(60000,(Math.floor(now/3600000)+1)*3600000-now),sameHour:true}
+ ];
+ return sources.map(x=>{
+  let valid=x.ts>0&&now>=x.ts&&now-x.ts<=x.ttl;
+  if(x.sameHour)valid=valid&&state.hourlyWindowEnd===Math.floor(now/3600000)*3600000;
+  if(x.name==='Funding histórico liquidado')valid=valid&&state.lastFundingAt>0;
+  if(x.name==='Funding indicativo siguiente'&&state.fundingNextAt<=now)valid=false;
+  const status=x.noEvents?'Sin eventos observados':valid?'VIGENTE':x.ts?'ATRASADO':'SIN DATOS';
+  const label=x.name+' · '+x.origin+' · '+status+
+   (x.ts?' · dato '+dateTime(x.dated?x.ts:x.sameHour?state.hourlyWindowEnd:x.name==='Funding histórico liquidado'?state.lastFundingAt:x.ts):'');
+  return {...x,status,label,valid}
+ })
+}
+function renderSourceFreshness(now=Date.now()){
+ const target=$('sourceFreshness');if(!target)return;
+ const rows=sourceFreshness(now);
+ target.innerHTML=rows.map(x=>'<div class="alertrow">'+escapeHtml(x.label)+'</div>').join('');
+ const up=rows.filter(x=>x.valid).length;
+ $('sourceFreshnessSummary').textContent=up+'/'+rows.length+' lecturas con datos vigentes · último control '+time(now)+
+  ' · los cortes y los periodos sin eventos no se reconstruyen';
+ if(state.fngAt&&now-state.fngAt>36*3600000){
+  $('fngClass').textContent='Dato diario atrasado';
+  $('fngValue').textContent='—'
+ }
+ if(state.lastFundingFetchedAt&&now-state.lastFundingFetchedAt>600000){
+  $('fundingPrevious').textContent='—';$('fundingPreviousStamp').textContent='Bybit · historial sin consulta reciente'
+ }
+ if(state.fundingAt&&(now-state.fundingAt>300000||state.fundingNextAt<=now)){
+  state.fundingRate=null;$('fundingCurrent').textContent='—';
+  $('fundingNext').textContent='Bybit · tasa indicativa atrasada; sin tasa vigente'
+ }
+ if(state.hourlyAt&&state.hourlyWindowEnd!==Math.floor(now/3600000)*3600000){
+  $('hourlySentimentLabel').textContent='Nueva hora: cálculo pendiente';
+  $('hourlySentimentLabel').className='num';
+  $('hourlySentimentStamp').textContent='Última ventana '+dateTime(state.hourlyWindowEnd)+
+   ' · lectura anterior, no vigente'
+ }
+ if(state.ratioAt&&now-state.ratioAt>Math.max(600000,Number(state.tf)*60000*3)){
+  state.ratioLong=null;state.ratioShort=null;
+  $('accountLong').textContent='—';$('accountShort').textContent='—';
+  $('accountRatioStamp').textContent='Bybit REST · ratio atrasado; esperando actualización'
+ }
+ if(state.lastOiAt&&now-state.lastOiAt>120000){
+  $('oi').textContent='—';$('oiDelta').textContent='—';
+  $('oiStamp').textContent='Bybit/Binance REST · OI puntual atrasado'
+ }
+}
+
 function renderMarketSummary(now=Date.now()){
  if(!$('marketSummary'))return;
  if(!state.wsOk||now-state.lastPriceAt>20000){
@@ -399,12 +473,13 @@ function renderMarketSummary(now=Date.now()){
  const joined=state.oiAligned;
  if(joined&&joined.tf===state.tf&&now-joined.computedAt<180000&&now-joined.end<=Math.max(now,0)&&now-joined.end<=Math.max(Number(state.tf)*60000*2,600000)){
   lines.push('Precio y OI alineados, vela CERRADA '+time(joined.start)+'–'+time(joined.end)+
-   ': BTC '+pct(joined.pricePct)+'; OI '+pct(joined.oiPct)+'. No implica causalidad.');
+   ': BTC '+pct(joined.pricePct)+'; OI '+pct(joined.oiPct)+
+   (state.oiRelevance?.tf===state.tf&&state.oiRelevance.end===joined.end?' ('+state.oiRelevance.label.toLowerCase()+')':'')+'. No implica causalidad.');
  }else lines.push('Precio/OI cerrado: sin pareja temporal comparable reciente.');
  if(state.ratioLong!==null&&state.ratioAt>now-Number(state.tf)*60000*3-900000)
   lines.push('Ratio de cuentas: '+(state.ratioLong*100).toFixed(0)+'% con posiciones long y '+(state.ratioShort*100).toFixed(0)+'% short; no mide su capital.');
  if(state.fundingRate!==null&&now-state.fundingAt<300000)
-  lines.push('Funding indicado: '+(state.fundingRate>=0?'+':'')+(state.fundingRate*100).toFixed(4)+'% (no es señal direccional).');
+  lines.push('Funding indicativo para siguiente liquidación '+dateTime(state.fundingNextAt)+': '+(state.fundingRate>=0?'+':'')+(state.fundingRate*100).toFixed(4)+'% (no es pago histórico).');
  $('marketSummary').textContent=lines.join(' ');
  $('summaryStamp').textContent='Último análisis '+time(now)+' · descriptivo, sin señales ni probabilidades';
 }
@@ -1081,7 +1156,7 @@ function renderExchangeComparison(now=Date.now()){
 function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.wallDisappeared.clear();state.wallPolicy=null;state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
 async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
 async function getOi(){// Public sources, no credentials, no simulated fallback.
-const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent='Última lectura '+time(state.lastOiAt)+' · contratos BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}
+const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent=p.name+' REST BTCUSDT · consultado '+dateTime(state.lastOiAt)+' · OI en BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}
 async function getCandles(){const tf=state.tf,request=++state.candlesRequest;
  const providers=[{name:'Bybit',url:`https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=${tf}&limit=8`,parse:d=>{if(d.retCode!==0)throw Error('Bybit error');return d.result.list}},{name:'Binance',url:`https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=${tf==='60'?'1h':tf==='240'?'4h':tf+'m'}&limit=8`,parse:d=>d.map(x=>[x[0],x[1],x[2],x[3],x[4]])}];
  for(const source of providers){try{const d=await req(source.url),v=source.parse(d);
@@ -1103,6 +1178,31 @@ function closedPriceCandle(candles,start,end,now=Date.now()){
  if(!(open>0&&close>0&&Number.isFinite(open)&&Number.isFinite(close)))return null;
  return {start,end,open,close,pricePct:(close/open-1)*100};
 }
+
+// A descriptive relative threshold, NOT a statistical significance test.
+function classifyOiChange(points,periodMs,now=Date.now()){
+ if(!Array.isArray(points)||points.length<2)return {ok:false,reason:'OI insuficiente'};
+ const sorted=[...points].sort((a,b)=>a.ts-b.ts),last=sorted.at(-1),prev=sorted.at(-2);
+ if(!(last.v>0&&prev.v>0)||last.ts>now+1000||now-last.ts>Math.max(periodMs*2,600000)||
+  Math.abs(last.ts-prev.ts-periodMs)>1000)return {ok:false,reason:'Muestras OI no consecutivas o atrasadas'};
+ const observed=(last.v/prev.v-1)*100,history=[];
+ // Baseline excludes the interval being classified (avoid calibrating on itself).
+ for(let i=1;i<sorted.length-1;i++){
+  const a=sorted[i-1],b=sorted[i];
+  if(a.v>0&&b.v>0&&Math.abs(b.ts-a.ts-periodMs)<=1000){
+   history.push(Math.abs((b.v/a.v-1)*100))
+  }
+ }
+ if(history.length<8)return {ok:true,observed,samples:history.length,threshold:null,
+  label:'Sin histórico suficiente para valorar importancia'};
+ history.sort((a,b)=>a-b);
+ const median=history[Math.floor((history.length-1)/2)];
+ const threshold=Math.max(.03,Math.min(2,median*2));
+ const notable=Math.abs(observed)>=threshold;
+ return {ok:true,observed,threshold,samples:history.length,median,notable,
+  label:notable?'Mayor que la variación habitual reciente':'Variación moderada frente a histórico reciente'}
+}
+
 function alignPriceOi(points,candles,periodMs,now=Date.now()){
  if(!Array.isArray(points)||points.length<2)return {ok:false,reason:'Datos OI insuficientes'};
  const last=points.at(-1),prev=points.at(-2),gap=last.ts-prev.ts;
@@ -1137,7 +1237,9 @@ function drawOiSeries(){
 async function getOiSeries(){
  const tf=state.tf,interval=({'5':'5min','15':'15min','30':'30min','60':'1h','240':'4h'})[tf],request=++state.oiSeriesRequest;
  if(state.oiSeriesTf!==tf){
-  state.oiSeries=[];state.oiSeriesTf=tf;state.oiAligned=null;
+  state.oiSeries=[];state.oiSeriesTf=tf;state.oiAligned=null;state.oiRelevance=null;
+  $('oiAlignedPrice').textContent='—';
+  $('oiRelevance').textContent='Calibrando variación OI...';
   $('oiWindowDelta').textContent='—';$('oiWindowStamp').textContent='Cargando historial '+interval+'...';
   $('oiAlignedDetails').textContent='Buscando vela cerrada alineada con OI...';
   drawOiSeries()
@@ -1154,6 +1256,12 @@ async function getOiSeries(){
   if(state.tf!==tf||state.oiSeriesRequest!==request)return;
   state.oiSeries=points;state.oiSeriesAt=Date.now();
   const aligned=alignPriceOi(points,k.result?.list||[],Number(tf)*60000,Date.now());
+  const relevance=classifyOiChange(points,Number(tf)*60000,Date.now());
+  state.oiRelevance=aligned.ok&&relevance.ok?{...relevance,tf,end:aligned.end,computedAt:Date.now()}:null;
+  $('oiRelevance').textContent=aligned.ok&&relevance.ok?
+   relevance.label+' · '+(relevance.threshold===null?'umbral no disponible':'umbral relativo ±'+relevance.threshold.toFixed(3)+'%')+
+   ' · cambio '+pct(relevance.observed)+' · '+relevance.samples+' intervalos previos consecutivos · Bybit '+interval:
+   'Sin clasificación OI: '+(!aligned.ok?aligned.reason:relevance.reason);
   state.oiAligned=aligned.ok?{...aligned,tf,computedAt:Date.now()}:null;
   if(aligned.ok){
    $('oiWindowDelta').textContent=pct(aligned.oiPct);
@@ -1173,7 +1281,8 @@ async function getOiSeries(){
   drawOiSeries();renderMarketSummary()
  }catch(e){
   if(state.tf!==tf||state.oiSeriesRequest!==request)return;
-  state.oiAligned=null;console.warn('OI y precio alineados',e.message);
+  state.oiAligned=null;state.oiRelevance=null;
+  $('oiRelevance').textContent='Clasificación OI no disponible; fuente o ventana caducada';console.warn('OI y precio alineados',e.message);
   const age=(Date.now()-state.oiSeriesAt)/60000;
   if(age>10||!state.oiSeries.length)state.oiSeries=[];
   $('oiWindowDelta').textContent='—';$('oiAlignedPrice').textContent='—';
@@ -1225,54 +1334,81 @@ async function getOfficialFearGreed(){
 }
 // Uses the PREVIOUS CLOSED hourly candle only, along with historical hourly
 // open interest and account positioning. A label is descriptive, NOT a trained index.
+
+function classifyHourlyContext(row){
+ const {open,close,high,low,oiStart,oiEnd,ratioLong,funding,oiRelevance}=row;
+ if(!(open>0&&close>0&&high>=low&&low>0&&oiStart>0&&oiEnd>0&&ratioLong>=0&&ratioLong<=1))
+  return {ok:false,reason:'Datos horarios fuera de rango'};
+ const pricePct=(close/open-1)*100,oiPct=(oiEnd/oiStart-1)*100;
+ const rangePct=(high/low-1)*100;
+ const priceBand=Math.max(.18,Math.min(.7,rangePct*.4));
+ const direction=pricePct>priceBand?'up':pricePct<-priceBand?'down':'flat';
+ const oiNotable=oiRelevance?.threshold!==null&&Number.isFinite(oiRelevance?.threshold)?
+  Math.abs(oiPct)>=oiRelevance.threshold:null;
+ const oiState=oiNotable===null?'sin contexto histórico':!oiNotable?'variación OI moderada':
+  oiPct>0?'expansión relevante de OI':'contracción relevante de OI';
+ const disagreement=(direction==='down'&&ratioLong>.60)||(direction==='up'&&ratioLong<.40);
+ const label=disagreement?'Precio y cuentas contrapuestos':direction==='up'?
+  'Subida con '+oiState:direction==='down'?'Caída con '+oiState:'Precio lateral y '+oiState;
+ const txt='BTC '+pct(pricePct)+' (umbral de movimiento '+priceBand.toFixed(3)+'%) · '+
+   'OI '+pct(oiPct)+' ('+oiState+') · cuentas long '+(ratioLong*100).toFixed(1)+
+   '% (cuentas, no capital). '+(disagreement?'Predomina un posicionamiento contrario al cambio del precio. ':'')+
+   (funding===null?'Funding no disponible como contexto actual.':
+    'Funding indicativo para el próximo pago '+(funding>=0?'+':'')+(funding*100).toFixed(4)+'%'+
+    ' (dato ACTUAL, no pertenece a la hora cerrada).')+
+   ' Sin inferencia de dirección futura.';
+ return {ok:true,label,detail:txt,pricePct,oiPct,direction,disagreement,oiNotable};
+}
 async function getHourlySentiment(){
  const slot=Math.floor(Date.now()/3600000);
  if(state.hourlyInFlight||slot===state.hourlySlot)return;
  state.hourlyInFlight=true;
- const closedStart=(slot-1)*3600000;
+ const start=(slot-1)*3600000,end=slot*3600000;
  try{
   const [k,o,a,t]=await Promise.all([
    req('https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval=60&limit=5'),
-   req('https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=1h&limit=5'),
+   req('https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=1h&limit=48'),
    req('https://api.bybit.com/v5/market/account-ratio?category=linear&symbol=BTCUSDT&period=1h&limit=5'),
    req('https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT')
   ]);
   if([k,o,a,t].some(x=>x.retCode!==0))throw Error('Bybit: respuesta incompleta');
-  const candle=(k.result?.list||[]).find(x=>Number(x[0])===closedStart);
-  const oi=(o.result?.list||[]).find(x=>Number(x.timestamp)===closedStart);
-  const oiPrev=(o.result?.list||[]).find(x=>Number(x.timestamp)===closedStart-3600000);
-  const ratio=(a.result?.list||[]).find(x=>Number(x.timestamp)===closedStart);
-  const funding=Number(t.result?.list?.[0]?.fundingRate);
-  const open=Number(candle?.[1]),close=Number(candle?.[4]);
-  const ov=Number(oi?.openInterest),op=Number(oiPrev?.openInterest);
-  const longs=Number(ratio?.buyRatio),shorts=Number(ratio?.sellRatio);
-  if(!open||!Number.isFinite(close)||close<=0||!ov||!op||
-    !Number.isFinite(longs)||!Number.isFinite(shorts)||Math.abs(longs+shorts-1)>.03||
-    !Number.isFinite(funding)||Math.abs(funding)>.2)throw Error('Datos horarios insuficientes');
-  // A new hour can begin while requests are in flight.
-  if(Math.floor(Date.now()/3600000)!==slot)return;
-  const priceCh=(close/open-1)*100,oiCh=(ov/op-1)*100;
-  const trend=priceCh>.25?'up':priceCh<-.25?'down':'flat';
-  const conflict=(trend==='up'&&longs<.4)||(trend==='down'&&longs>.6);
-  let label=conflict?'Señales contrapuestas':trend==='up'?'Optimismo intradía':trend==='down'?'Cautela intradía':'Sentimiento mixto';
-  const primary=trend==='up'?'BTC subió':trend==='down'?'BTC cayó':'BTC mostró poco desplazamiento';
-  const oiText=oiCh>.05?'aumentó':oiCh<-.05?'disminuyó':'cambió poco';
-  const fmt=x=>(x>=0?'+':'')+x.toFixed(2)+'%';
-  $('hourlySentimentLabel').textContent=label;
-  $('hourlySentimentLabel').className='num '+(conflict?'gold':trend==='up'?'up':trend==='down'?'down':'');
-  $('hourlySentimentDetail').textContent=primary+' '+fmt(priceCh)+' en la hora cerrada; OI '+oiText+' '+fmt(oiCh)+'. '+(longs*100).toFixed(1)+'% de las cuentas estaban long (no equivale al capital). Funding indicado '+fmt(funding*100)+'.';
-  $('hourlySentimentStamp').textContent='Ventana '+time(closedStart)+'–'+time(closedStart+3600000)+' · Bybit · cálculo horario';
-  state.hourlySlot=slot;state.hourlyAt=Date.now();
+  const c=(k.result?.list||[]).find(x=>Number(x[0])===start);
+  const points=(o.result?.list||[]).map(x=>({ts:Number(x.timestamp),v:Number(x.openInterest)}))
+   .filter(x=>x.v>0&&Number.isFinite(x.ts)).sort((a,b)=>a.ts-b.ts);
+  const from=points.find(x=>x.ts===start),to=points.find(x=>x.ts===end);
+  // Account ratio is a snapshot; use the observation at the end of the interval.
+  const ratio=(a.result?.list||[]).find(x=>Number(x.timestamp)===end);
+  const long=finiteNum(ratio?.buyRatio),short=finiteNum(ratio?.sellRatio);
+  const funding=finiteNum(t.result?.list?.[0]?.fundingRate);
+  const next=finiteNum(t.result?.list?.[0]?.nextFundingTime);
+  const now=Date.now();
+  if(!c||!from||!to||end>now||!Array.isArray(c)||
+   !Number.isFinite(Number(c[1]))||!Number.isFinite(Number(c[4]))||
+   long===null||short===null||Math.abs(long+short-1)>.03||
+   !Number.isFinite(from.v)||!Number.isFinite(to.v))throw Error('Hora OI/precio/ratio sin correspondencia');
+  // Never use the currently forming candle or stale account readings.
+  if(Math.floor(now/3600000)!==slot)return;
+  const history=points.filter(x=>x.ts<=end);
+  const relevance=classifyOiChange(history,3600000,now);
+  if(!relevance.ok)throw Error('OI horario no consecutivo o atrasado');
+  const currFunding=funding!==null&&Math.abs(funding)<.2&&next&&next>now&&next<now+86400000?funding:null;
+  const result=classifyHourlyContext({open:Number(c[1]),close:Number(c[4]),high:Number(c[2]),low:Number(c[3]),
+    oiStart:from.v,oiEnd:to.v,ratioLong:long,funding:currFunding,oiRelevance:relevance});
+  if(!result.ok)throw Error(result.reason);
+  state.hourlySlot=slot;state.hourlyAt=now;state.hourlyWindowEnd=end;
+  $('hourlySentimentLabel').textContent=result.label;
+  $('hourlySentimentLabel').className='num '+(result.disagreement?'gold':result.direction==='up'?'up':result.direction==='down'?'down':'');
+  $('hourlySentimentDetail').textContent=result.detail;
+  $('hourlySentimentStamp').textContent='Ventana CERRADA '+dateTime(start)+'–'+dateTime(end)+
+   ' · Bybit kline/OI; ratio de cuentas '+dateTime(end)+' · calculado '+time(now);
  }catch(err){
   console.warn('Termómetro horario',err.message);
-  if(state.hourlyAt===0){
-   $('hourlySentimentLabel').textContent='Sin datos suficientes';
-   $('hourlySentimentDetail').textContent='No se inventa una lectura si faltan velas cerradas, OI o ratios horarios.';
-   $('hourlySentimentStamp').textContent='Intentará actualizar al recuperar datos';
-  }else{
-   $('hourlySentimentStamp').textContent='Último cálculo: '+time(state.hourlyAt)+' · actualización pendiente';
-  }
- }finally{state.hourlyInFlight=false}
+  if(state.hourlyWindowEnd!==end){
+   $('hourlySentimentLabel').textContent='Sin lectura horaria vigente';
+   $('hourlySentimentLabel').className='num';
+   $('hourlySentimentDetail').textContent='No se mezclan OI, precio o cuentas de intervalos distintos. '+err.message;
+   $('hourlySentimentStamp').textContent='Bybit · actualización pendiente · '+dateTime(end);
+  }else $('hourlySentimentStamp').textContent='Última lectura '+dateTime(end)+' · no se pudo refrescar';
+ }finally{state.hourlyInFlight=false;renderSourceFreshness()}
 }
-
-function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getOfficialFearGreed,3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getHourlySentiment();getOfficialFearGreed();getOi();getCandles();if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();
+function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getOfficialFearGreed,3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getHourlySentiment();getOfficialFearGreed();getOi();getCandles();if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();

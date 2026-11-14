@@ -16,6 +16,8 @@
 
 **Bloque D — operaciones, flujo y liquidaciones (14/11/2026):** #16 rachas de ejecuciones grandes del mismo lado separadas de prints aislados (máximo 12 s entre ejecuciones y diferencia relativa de precios ≤0,06%, sin atribuir operador); #17 presión agresora frente a desplazamiento real entre primera y última operación de la misma ventana de 90 s; #18 referencia de importe relativo por percentil 95 de las operaciones de 5 min, actualizada como máximo cada 5 s, con mínimos y manteniendo la configuración manual de alertas individuales como suelo; #19 ventanas independientes 90 s, 5 min y sesión (CVD y liquidaciones recibidas), con aviso de pérdida de cobertura y límites de memoria; #20 trades deduplicados por ID único de Bybit, secuencia temporal ordenada y precio en vivo protegido frente a entregas atrasadas, liquidaciones deduplicadas **solo aproximadamente** por huella de campos porque no existe identificador público único. Pruebas focales: `node tests/v2_flow_d.test.cjs` (27 casos). Integración: `node tests/v2_flow_mobile.cjs` (viewport móvil 390×844, datos BTCUSDT, 0 errores JS; más de 1000 operaciones reales recibidas; no se observaron liquidaciones reales durante la prueba corta). Pruebas de liquidaciones y de secuencias significativas reproducidas con datos sintéticos; no se garantiza precisión predictiva ni se confunde con pruebas prolongadas en Android físico (#39 ROJO).
 
+**Bloque E — OI, Funding, sentimiento y vigencia (14/11/2026):** #22 compara la variación OI de cada marco con un umbral relativo basado en dos veces la mediana de las variaciones absolutas de intervalos históricos consecutivos (mínimo 0,03%, máximo 2%; excluye intervalo evaluado), con estado de evidencia insuficiente cuando faltan 8 comparaciones. #23 distingue tasa indicativa de `Bybit tickers` para `nextFundingTime` del historial efectivamente liquidado de `Bybit funding/history` y muestra fechas, horas, consulta y caducidad independientes; las tasas indicativas no son pagos realizados. #24 corrige la alineación horaria: precio de la vela cerrada `[inicio, fin)`, OI entre `inicio` y `fin`, ratio de cuentas en `fin`, y Funding indicativo actual solo como contexto separado, nunca atribuido a la hora cerrada. Integra señales coincidentes/contradictorias sin llamar predicción al resultado. #25 añade el panel de vigencia y procedencia de 11 clases de lecturas existentes y bloquea la presentación como actual de Funding, OI, ratio, Fear & Greed y sentimiento cuando están atrasados. Pruebas focales: `node tests/v2_oi_funding_e.test.cjs` (25 PASS). Prueba móvil: `node tests/v2_oi_funding_mobile.cjs` con datos reales y las cinco temporalidades, cero errores JS y sin desbordamiento horizontal. Los umbrales OI son descriptivos, no pruebas de significancia estadística. No se han validado sesiones prolongadas en Android físico (#39 permanece ROJO).
+
 ## Libro de órdenes y bloqueos
 - 🟢 01 Agrupar liquidez en bandas contiguas próximas por lado, sumando importes visibles de Bybit sin tratarlos como una orden única. Rangos y umbrales visibles en pantalla.
 - 🟢 02 Registrar incrementos y reducciones relevantes de liquidez visible, importes antes/después y acumulados observados por nivel, con historial limitado y panel de evolución.
@@ -46,10 +48,10 @@
 
 ## OI, funding y sentimiento
 - 🟢 21 Comparación precio–OI con dos muestras consecutivas de OI y vela Bybit cerrada exactamente correspondiente, comprobada en 5m/15m/30m/1h/4h. Se rechazan velas abiertas, huecos, resultados atrasados o de otro exchange; zonas hipotéticas históricas también ancladas a intervalos cerrados. Datos descriptivos, no inferencia causal.
-- 🔴 22 Calibración de cambios relevantes de OI.
-- 🔴 23 Semántica de funding actual/pagado/futuro.
-- 🔴 24 Interpretación conjunta del sentimiento horario.
-- 🔴 25 Fecha y vigencia de todos los campos.
+- 🟢 22 Umbral relativo OI por marco a partir de variaciones absolutas históricas consecutivas, excluyendo la ventana evaluada; muestra número de comparaciones y no infiere relevancia si el histórico es insuficiente.
+- 🟢 23 Diferencia tasa **indicativa** del próximo funding (`tickers`, próxima fecha) y tasa histórica **liquidada** (`funding/history`, fecha del pago), con consulta y caducidad independientes. Funding no mide dirección futura.
+- 🟢 24 Interpreta conjuntamente BTC, OI y cuentas al cierre de la **misma hora**: precio y OI de intervalos coincidentes, ratio en el cierre; Funding del próximo pago separado. Clasifica contradicciones explícitas, datos ausentes y umbral de movimiento relativo; no predice.
+- 🟢 25 Panel de 11 fuentes/grupos existentes con proveedor, fecha de dato y estado temporal (VIGENTE/ATRASADO/SIN DATOS/SIN EVENTOS); protege la visualización de OI, ratio de cuentas, Funding, sentimiento y miedo/codicia atrasados y muestra sus fuentes/tiempos en cada bloque principal.
 
 ## Binance contra Bybit
 - 🟢 26 Comparación de varias concentraciones entre los 20 niveles, no solo máximo por lado.
@@ -72,4 +74,4 @@
 - 🔴 39 Validación prolongada de sesiones Android.
 - 🔴 40 Comprobación automática de publicación.
 
-**Estado tras Bloque D:** 24 ítems completamente terminados / 40 propuestos (60%); 16 pendientes. VERDE = implementado, probado focalmente y publicado. El resultado no significa acierto predictivo ni validación económica. Seguimiento continuo, reconexiones prolongadas y pruebas en Android físico (#35, #39) siguen ROJAS.
+**Estado tras Bloque E:** 28 ítems completamente terminados / 40 propuestos (70%); 12 pendientes. VERDE significa función implementada, probada focalmente y publicada, no rentabilidad ni validez predictiva. Los controles de reconexión de larga duración y Android físico (#35, #39) siguen ROJOS. El dato temporal «vigente» significa reciente según su intervalo esperado, no garantiza que sea completo.

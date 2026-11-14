@@ -156,6 +156,7 @@ function alertUser(txt,key,limit=60000,meta={}){
  }else state.alertGrouped++;
  pruneAlertGroups(now);
  renderAlerts(now,material);
+ renderTopSnapshot(now,material);
  return material
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -609,6 +610,100 @@ function renderSourceFreshness(now=Date.now()){
  if(state.lastOiAt&&now-state.lastOiAt>120000){
   $('oi').textContent='—';$('oiDelta').textContent='—';
   $('oiStamp').textContent='Bybit/Binance REST · OI puntual atrasado'
+ }
+}
+
+
+// Compact read-only summary of EXISTING data, never a new signal.
+function topSnapshot(now=Date.now()){
+ const tf=Number(state.tf),period=tf*60000;
+ const priceFresh=state.wsOk&&state.price>0&&state.lastPriceAt>0&&
+  now>=state.lastPriceAt&&now-state.lastPriceAt<=20000;
+ const price=priceFresh?
+  {value:usd(state.price),detail:'Bybit publicTrade · '+time(state.lastPriceAt),valid:true}:
+  {value:'Sin precio vigente',detail:state.lastPriceAt?'Último dato '+time(state.lastPriceAt)+' · atrasado':'Bybit · esperando operaciones',valid:false};
+ const trades=tradesWithin(300000,now);
+ const flow=flowWindow(trades),enough=priceFresh&&flow.count>=12&&flow.total>=150000&&
+  flow.duration>=25000;
+ const buyPercent=flow.total>0?100*flow.buy/flow.total:null;
+ const flowData=enough?
+  {value:buyPercent>=60?'Compras '+buyPercent.toFixed(0)+'%':buyPercent<=40?'Ventas '+(100-buyPercent).toFixed(0)+'%':'Equilibrado',
+   detail:usd(flow.total)+' · '+flow.count+' operaciones · ventana móvil 5 min · Bybit',valid:true}:
+  {value:'Muestra insuficiente',detail:'Bybit publicTrade · 5 min; no inferir predominio',valid:false};
+ const aligned=state.oiAligned;
+ const oiValid=!!aligned&&aligned.ok&&aligned.tf===state.tf&&
+  aligned.computedAt>0&&now-aligned.computedAt<180000&&
+  aligned.end<=now&&aligned.end>=now-Math.max(period*2,600000)&&
+  state.oiSeriesTf===state.tf&&now-state.oiSeriesAt<Math.max(180000,period*.5);
+ const oi=oiValid?
+  {value:'OI '+pct(aligned.oiPct)+' · BTC '+pct(aligned.pricePct),
+   detail:'Vela Bybit cerrada '+time(aligned.start)+'–'+time(aligned.end)+' · misma ventana',valid:true}:
+  {value:'Sin pareja OI–BTC',detail:'Esperando vela cerrada y OI consecutivo '+tfPeriod(),valid:false};
+ const fundingValid=state.fundingRate!==null&&Number.isFinite(state.fundingRate)&&state.fundingAt>0&&
+  now-state.fundingAt>=0&&now-state.fundingAt<=300000&&state.fundingNextAt>now;
+ const funding=fundingValid?
+  {value:(state.fundingRate>=0?'+':'')+(state.fundingRate*100).toFixed(4)+'%',
+   detail:'Indicativa próximo pago '+dateTime(state.fundingNextAt)+' · Bybit',valid:true}:
+  {value:'Funding no vigente',detail:'Bybit tickers · esperando tasa y fecha del próximo pago',valid:false};
+ const material=state.alerts.filter(a=>a.priority&&a.priority.rank>=2&&now-a.lastImportantAt<=600000&&now>=a.lastImportantAt)
+  .sort((a,b)=>b.priority.rank-a.priority.rank||b.lastImportantAt-a.lastImportantAt)[0]||null;
+ return {price,flow:flowData,oi,funding,material}
+}
+function renderTopSnapshot(now=Date.now(),force=false){
+ const target=$('topSnapshot');if(!target)return;
+ if(!force&&state.lastTopRenderAt&&now-state.lastTopRenderAt<2000)return;
+ state.lastTopRenderAt=now;
+ const snapshot=topSnapshot(now),fields=[
+  ['topPrice',snapshot.price],['topFlow',snapshot.flow],
+  ['topOi',snapshot.oi],['topFunding',snapshot.funding]
+ ];
+ for(const [id,data] of fields){
+  const value=$(id),detail=$(id+'Detail');
+  if(value&&value.textContent!==data.value)value.textContent=data.value;
+  if(value)value.classList.toggle('top-unavailable',!data.valid);
+  if(detail&&detail.textContent!==data.detail)detail.textContent=data.detail
+ }
+ const alert=$('topImportantAlert'),stamp=$('topImportantStamp');
+ let label='Sin alertas ALTA/MEDIA recientes';
+ let description='Se muestran solo eventos observados durante la sesión con antigüedad ≤10 min; consulta todos abajo.';
+ if(snapshot.material){
+  const a=snapshot.material;
+  label=a.priority.name+' · '+a.text;
+  description=(a.source||'BTCUSDT · evento registrado')+' · '+time(a.lastImportantAt)+' · '+a.priority.reason+
+   ' · evento observado, no dirección futura';
+ }else if(!state.wsOk||!snapshot.price.valid){
+  label='Mercado sin datos recientes';
+  description='Sin evaluación actual de alertas importantes; los avisos anteriores siguen abajo.'
+ }
+ if(alert.textContent!==label)alert.textContent=label;
+ if(stamp.textContent!==description)stamp.textContent=description;
+ $('topSnapshotClock').textContent='Última comprobación '+time(now)+' · datos read-only'
+}
+function initFolds(){
+ const key='btc-intelligence-v2-panels';
+ let stored={};
+ try{
+  const raw=JSON.parse(localStorage.getItem(key)||'{}');
+  if(raw&&typeof raw==='object'&&!Array.isArray(raw))stored=raw
+ }catch{}
+ const panels=[...document.querySelectorAll('details.foldable[data-panel]')];
+ for(const panel of panels){
+  const id=panel.dataset.panel;
+  if(Object.prototype.hasOwnProperty.call(stored,id)){
+   panel.open=stored[id]===true
+  }
+  panel.addEventListener('toggle',()=>{
+   if(panel.open){
+    requestAnimationFrame(()=>{
+     if(panel.querySelector('#heat'))draw();
+     if(panel.querySelector('#liquidityHeat'))drawLiquidityHeat();
+     if(panel.querySelector('#oiChart'))drawOiSeries()
+    })
+   }
+   const updated={};
+   for(const p of panels)updated[p.dataset.panel]=p.open;
+   try{localStorage.setItem(key,JSON.stringify(updated))}catch{}
+  })
  }
 }
 
@@ -1683,4 +1778,4 @@ async function getHourlySentiment(){
   }else $('hourlySentimentStamp').textContent='Última lectura '+dateTime(end)+' · no se pudo refrescar';
  }finally{state.hourlyInFlight=false;renderSourceFreshness()}
 }
-function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getOfficialFearGreed,3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getHourlySentiment();getOfficialFearGreed();getOi();getCandles();if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();
+function init(){initFolds();tabs();restore();renderTopSnapshot(Date.now(),true);$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getOfficialFearGreed,3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);renderTopSnapshot(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getHourlySentiment();getOfficialFearGreed();getOi();getCandles();if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();

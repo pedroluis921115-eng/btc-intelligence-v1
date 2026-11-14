@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,sessionStart:Date.now(),tradeIds:new Map(),liqFingerprints:new Map(),tradeDuplicates:0,liqDuplicates:0,tradeRejected:0,liqRejected:0,lastTradeEventTs:0,lastTradeSeq:-1,tradeWindowTruncated:false,liqWindowTruncated:false,printPolicyCache:null,lastFlowPrune:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,lastFundingFetchedAt:0,fundingHistoryRequest:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],breakoutSuppressed:0,lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0,hourlyWindowEnd:0,oiRelevance:null};
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,sessionStart:Date.now(),tradeIds:new Map(),liqFingerprints:new Map(),tradeDuplicates:0,liqDuplicates:0,tradeRejected:0,liqRejected:0,lastTradeEventTs:0,lastTradeSeq:-1,tradeWindowTruncated:false,liqWindowTruncated:false,printPolicyCache:null,lastFlowPrune:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,lastFundingFetchedAt:0,fundingHistoryRequest:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],breakoutSuppressed:0,lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,compareTracks:new Map(),compareSampleAt:0,compareSampleBybit:0,compareSampleBinance:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0,hourlyWindowEnd:0,oiRelevance:null};
 const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 const dateTime=ms=>new Date(ms).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
@@ -1003,6 +1003,7 @@ function onBook(d){
  if(!a||!Array.isArray(a.b)||!Array.isArray(a.a))return;
  const now=Date.now();
  if(d.type==='snapshot'||a.u===1){
+  resetComparisonPersistence();
   resetWallTracking();
   state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.wallDisappeared.clear();state.wallPolicy=null;state.heatSamples=[];state.lastHeatAt=0;drawLiquidityHeat();
  }
@@ -1095,7 +1096,7 @@ function connectBinance(){
  socket.onerror=()=>{$('binanceStatus').textContent='Error de conexión'};
  socket.onclose=()=>{
   if(state.binanceWs!==socket)return;
-  state.binanceBids=[];state.binanceAsks=[];state.binanceLastAt=0;
+  state.binanceBids=[];state.binanceAsks=[];state.binanceLastAt=0;resetComparisonPersistence();
   $('binanceStatus').textContent='Reconectando';renderExchangeComparison();
   if(!state.binanceReconn)state.binanceReconn=setTimeout(connectBinance,9000)
  }
@@ -1127,33 +1128,129 @@ function findWallMatches(bybitRows,binanceRows,side,reference){
  return chosen
 }
 
+
+// Only compare equal top-20 book coverage, in quote notional USD (price × BTC qty).
+// Each market has its own best bid/ask midpoint. A common raw price can be a
+// DIFFERENT depth from mid when the two venues have a basis/spread difference.
+function comparisonReference(bids,asks){
+ if(bids.length<2||asks.length<2)return null;
+ const bestBid=Number(bids[0].p),bestAsk=Number(asks[0].p);
+ if(!(bestBid>0&&bestAsk>bestBid))return null;
+ const mid=(bestBid+bestAsk)/2,spreadBps=(bestAsk-bestBid)/mid*10000;
+ if(!Number.isFinite(spreadBps)||spreadBps>20)return null;
+ return {mid,bestBid,bestAsk,spreadBps}
+}
+function comparableCandidates(rows,mid){
+ const list=rows.slice(0,20).map((x,i)=>({
+  p:Number(x.p),q:Number(x.q),i
+ })).filter(x=>x.p>0&&x.q>0&&Number.isFinite(x.p)&&Number.isFinite(x.q))
+  .map(x=>({...x,v:x.p*x.q,offsetBps:(x.p/mid-1)*10000}));
+ const sizes=list.map(x=>x.v).sort((a,b)=>a-b);
+ const median=sizes.length?sizes[Math.floor((sizes.length-1)/2)]:1;
+ return list.filter(x=>x.v>=100000).map(x=>({...x,relative:x.v/Math.max(1,median)}))
+}
+function normalizedCrossMatches(bybitRows,binanceRows,side,bybitMid,binanceMid){
+ const a=comparableCandidates(bybitRows,bybitMid),b=comparableCandidates(binanceRows,binanceMid),matches=[];
+ // Prior relative tolerance is max($10, 0.035%); express in common basis points.
+ const toleranceBps=Math.max(3.5,100000/Math.min(bybitMid,binanceMid));
+ for(const x of a)for(const y of b){
+  const separation=Math.abs(x.offsetBps-y.offsetBps);
+  if(separation>toleranceBps)continue;
+  const comparableStrength=Math.min(x.relative,y.relative);
+  const score=comparableStrength*Math.log1p(Math.min(x.v,y.v)/100000);
+  matches.push({side,bybitPrice:x.p,binancePrice:y.p,bybitUsd:x.v,binanceUsd:y.v,
+   bybitOffsetBps:x.offsetBps,binanceOffsetBps:y.offsetBps,separationBps:separation,
+   comparableStrength,score,ai:x.i,bi:y.i,toleranceBps})
+ }
+ matches.sort((x,y)=>y.score-x.score||x.separationBps-y.separationBps);
+ const chosen=[],usedA=new Set(),usedB=new Set();
+ for(const x of matches){
+  if(usedA.has(x.ai)||usedB.has(x.bi))continue;
+  usedA.add(x.ai);usedB.add(x.bi);chosen.push(x);
+  if(chosen.length>=2)break
+ }
+ return chosen
+}
+function resetComparisonPersistence(){
+ state.compareTracks.clear();state.compareSampleAt=0;
+ state.compareSampleBybit=0;state.compareSampleBinance=0
+}
+function comparisonTrackKey(x){
+ // Exact visible prices in each venue, not a claim of identical order identity.
+ return x.side+'|'+x.bybitPrice.toFixed(2)+'|'+x.binancePrice.toFixed(2)
+}
+function observeComparison(matches,now=Date.now()){
+ if(state.compareSampleAt&&now-state.compareSampleAt>10000)resetComparisonPersistence();
+ if(state.compareSampleAt&&now-state.compareSampleAt<3800)return false;
+ // A UI repaint alone cannot increase persistence: both book streams must advance.
+ if(state.lastBookAt<=state.compareSampleBybit||
+   state.binanceLastAt<=state.compareSampleBinance)return false;
+ const next=new Map();
+ for(const x of matches){
+  const key=comparisonTrackKey(x),old=state.compareTracks.get(key);
+  if(old&&now-old.lastAt<=10000)
+   next.set(key,{firstAt:old.firstAt,lastAt:now,count:old.count+1});
+  else next.set(key,{firstAt:now,lastAt:now,count:1})
+ }
+ state.compareTracks=next;state.compareSampleBybit=state.lastBookAt;
+ state.compareSampleBinance=state.binanceLastAt;state.compareSampleAt=now;
+ return true
+}
 function renderExchangeComparison(now=Date.now()){
- const bybitFresh=state.wsOk&&now-state.lastBookAt<8000,binanceFresh=now-state.binanceLastAt<8000;
+ const bybitFresh=state.wsOk&&now-state.lastBookAt>=0&&now-state.lastBookAt<8000;
+ const binanceFresh=now-state.binanceLastAt>=0&&now-state.binanceLastAt<8000;
  const market=(name,bids,asks)=>{
   const b=majorLevel(bids),a=majorLevel(asks);
   $(name+'Bid').textContent=b?usd(b.p)+' · '+usd(b.v):'—';
-  $(name+'Ask').textContent=a?usd(a.p)+' · '+usd(a.v):'—';
-  return {bid:b,ask:a}
+  $(name+'Ask').textContent=a?usd(a.p)+' · '+usd(a.v):'—'
  };
- const bybitBids=bybitFresh?bestComparisonLevels(state.bids,'bid'):[],bybitAsks=bybitFresh?bestComparisonLevels(state.asks,'ask'):[];
+ const bybitBids=bybitFresh?bestComparisonLevels(state.bids,'bid'):[];
+ const bybitAsks=bybitFresh?bestComparisonLevels(state.asks,'ask'):[];
  const binanceBids=binanceFresh?state.binanceBids:[],binanceAsks=binanceFresh?state.binanceAsks:[];
- market('cmpBybit',bybitBids,bybitAsks);
- market('cmpBinance',binanceBids,binanceAsks);
- const src=$('compareStatus'),conf=$('compareCoincidence');
- src.textContent='Bybit '+(bybitFresh?'actualizado':'sin datos recientes')+' · Binance '+(binanceFresh?'actualizado':'sin datos recientes')+' · '+time(now);
+ market('cmpBybit',bybitBids,bybitAsks);market('cmpBinance',binanceBids,binanceAsks);
+ const src=$('compareStatus'),conf=$('compareCoincidence'),detail=$('compareNormalization');
+ src.textContent='Bybit '+(bybitFresh?'actualizado':'sin datos recientes')+
+  ' · Binance '+(binanceFresh?'actualizado':'sin datos recientes')+' · '+time(now);
  $('binanceStatus').textContent=binanceFresh?'Conectado':'Sin datos recientes';
  if(!bybitFresh||!binanceFresh||Math.abs(state.lastBookAt-state.binanceLastAt)>5000){
+  resetComparisonPersistence();
+  detail.textContent='Sin referencias de precio simultáneas y frescas; persistencia reiniciada.';
   conf.textContent='Comparación no disponible: fuentes ausentes o sin sincronía temporal suficiente.';return
  }
- const overlaps=[
-  ...findWallMatches(bybitBids,binanceBids,'bid',state.price),
-  ...findWallMatches(bybitAsks,binanceAsks,'ask',state.price)
+ const bRef=comparisonReference(bybitBids,bybitAsks),nRef=comparisonReference(binanceBids,binanceAsks);
+ if(!bRef||!nRef){
+  resetComparisonPersistence();
+  detail.textContent='Libro incompleto, cruzado o spread excesivo en algún mercado; persistencia reiniciada.';
+  conf.textContent='Coincidencias no comparables: no se pudo validar el mejor bid/ask de ambos mercados.';return
+ }
+ const basis=(nRef.mid/bRef.mid-1)*10000;
+ detail.textContent='Mids: Bybit '+usd(bRef.mid)+' (spread '+bRef.spreadBps.toFixed(2)+' pb), Binance '+
+  usd(nRef.mid)+' (spread '+nRef.spreadBps.toFixed(2)+' pb). Diferencia de mids '+
+  (basis>=0?'+':'')+basis.toFixed(2)+' pb · importe nivel = precio × BTC (US$) · fortaleza relativa a mediana de 20 niveles por lado.';
+ if(Math.abs(basis)>25){
+  resetComparisonPersistence();
+  conf.textContent='Comparación suspendida: diferencia de precio medio entre exchanges superior a 25 pb; no se presume equivalencia.';return
+ }
+ const matches=[
+  ...normalizedCrossMatches(bybitBids,binanceBids,'bid',bRef.mid,nRef.mid),
+  ...normalizedCrossMatches(bybitAsks,binanceAsks,'ask',bRef.mid,nRef.mid)
  ];
- conf.textContent=overlaps.length?overlaps.map(x=>(x.side==='bid'?'Compras':'Ventas')+' cerca de '+usd(x.p)+' (diferencia '+usd(x.dist)+')').join(' · ')+'. Hasta 2 coincidencias por lado; no son una misma orden.':
-  'Sin coincidencias de liquidez ≥US$100.000 por exchange dentro de ±0,035% del precio (mínimo US$10), entre los primeros 20 niveles por lado.'
+ observeComparison(matches,now);
+ conf.textContent=matches.length?matches.map(x=>{
+  const track=state.compareTracks.get(comparisonTrackKey(x));
+  const age=track?now-track.firstAt:0,observed=track?.count||0;
+  const confirmed=track&&observed>=3&&age>=12000&&now-track.lastAt<=8000;
+  return (x.side==='bid'?'Compras':'Ventas')+' a profundidad relativa similar: '+
+   'Bybit '+usd(x.bybitPrice)+' ('+usd(x.bybitUsd)+') y Binance '+usd(x.binancePrice)+
+   ' ('+usd(x.binanceUsd)+') · separación '+x.separationBps.toFixed(2)+' pb · '+
+   'fortaleza relativa mínima ×'+x.comparableStrength.toFixed(2)+' · '+
+   (confirmed?'PERSISTENTE':'EN OBSERVACIÓN')+
+   ' ('+observed+' muestras de ambos libros; '+Math.round(age/1000)+' s)'
+ }).join(' · ')+'. Son precios/posiciones relativas similares, no una misma orden ni garantía de soporte.':
+  'Sin niveles ≥US$100.000 en cada mercado a profundidad relativa comparable (máximo 2 por lado). No se suman importes entre exchanges.'
 }
 
-function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.wallDisappeared.clear();state.wallPolicy=null;state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
+function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetComparisonPersistence();resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.zoneSeen.clear();state.wallDisappeared.clear();state.wallPolicy=null;state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
 async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
 async function getOi(){// Public sources, no credentials, no simulated fallback.
 const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent=p.name+' REST BTCUSDT · consultado '+dateTime(state.lastOiAt)+' · OI en BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}

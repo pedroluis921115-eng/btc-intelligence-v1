@@ -18,6 +18,8 @@
 
 **Bloque E — OI, Funding, sentimiento y vigencia (14/11/2026):** #22 compara la variación OI de cada marco con un umbral relativo basado en dos veces la mediana de las variaciones absolutas de intervalos históricos consecutivos (mínimo 0,03%, máximo 2%; excluye intervalo evaluado), con estado de evidencia insuficiente cuando faltan 8 comparaciones. #23 distingue tasa indicativa de `Bybit tickers` para `nextFundingTime` del historial efectivamente liquidado de `Bybit funding/history` y muestra fechas, horas, consulta y caducidad independientes; las tasas indicativas no son pagos realizados. #24 corrige la alineación horaria: precio de la vela cerrada `[inicio, fin)`, OI entre `inicio` y `fin`, ratio de cuentas en `fin`, y Funding indicativo actual solo como contexto separado, nunca atribuido a la hora cerrada. Integra señales coincidentes/contradictorias sin llamar predicción al resultado. #25 añade el panel de vigencia y procedencia de 11 clases de lecturas existentes y bloquea la presentación como actual de Funding, OI, ratio, Fear & Greed y sentimiento cuando están atrasados. Pruebas focales: `node tests/v2_oi_funding_e.test.cjs` (25 PASS). Prueba móvil: `node tests/v2_oi_funding_mobile.cjs` con datos reales y las cinco temporalidades, cero errores JS y sin desbordamiento horizontal. Los umbrales OI son descriptivos, no pruebas de significancia estadística. No se han validado sesiones prolongadas en Android físico (#39 permanece ROJO).
 
+**Bloque F — normalización y persistencia entre Binance–Bybit (14/11/2026):** #27 compara exclusivamente los primeros 20 niveles por lado en ambos mercados, calcula *mid* y spread bid/ask independientes de cada venue y normaliza cada nivel por profundidad relativa en puntos básicos frente a su propio *mid*. Exige al menos US$100.000 de notional por nivel y venue, rankea fortaleza relativa respecto a la mediana de 20 niveles de su lado y muestra importes y precios absolutos separados; informa la diferencia de precios medios y suspende comparación ante libros cruzados, spread >20 puntos básicos, diferencia de mids >25 pb o desfase entre feeds >5 s. #29 marca EN OBSERVACIÓN hasta verificar el mismo par de niveles de precio visibles en ≥3 observaciones independientes de ambos libros nuevos y ≥12 segundos; las repeticiones de render no incrementan el contador, y la ausencia, cambios de nivel, desconexiones, snapshots de reinicio o datos atrasados reinician la persistencia. Máximo dos coincidencias por lado. No prueba identidad de órdenes, ejecución, soporte ni rentabilidad. Pruebas focales: `node tests/v2_cross_venue_f.test.cjs` (**30/30 PASS**). Integración: `node tests/v2_cross_venue_mobile.cjs` (390×844, Bybit L2 200 y Binance depth20 en vivo, 0 errores JS, sin desbordamiento y control de persistencia con datos inyectados únicamente en la prueba). En una captura real no hubo coincidencias elegibles: no se presentan como existentes. Sigue ROJA la validación prolongada Android (#39).
+
 ## Libro de órdenes y bloqueos
 - 🟢 01 Agrupar liquidez en bandas contiguas próximas por lado, sumando importes visibles de Bybit sin tratarlos como una orden única. Rangos y umbrales visibles en pantalla.
 - 🟢 02 Registrar incrementos y reducciones relevantes de liquidez visible, importes antes/después y acumulados observados por nivel, con historial limitado y panel de evolución.
@@ -55,9 +57,9 @@
 
 ## Binance contra Bybit
 - 🟢 26 Comparación de varias concentraciones entre los 20 niveles, no solo máximo por lado.
-- 🔴 27 Normalización adicional entre exchanges (precio de referencia y microestructura).
+- 🟢 27 Normaliza por *mid* propio y profundidad en pb de cada mercado; valida spreads y diferencia de mids, notional separado en US$, relevancia relativa a la mediana de cada libro top-20, y presenta los precios de ambos exchanges sin tratarlo como orden compartida.
 - 🟢 28 Tolerancia relativa de precio (0,035%, mínimo US$10) en vez de ±US$20 constante.
-- 🔴 29 Persistencia de niveles compartidos.
+- 🟢 29 Muestra EN OBSERVACIÓN hasta ≥3 muestras verdaderamente renovadas de ambos libros y ≥12 s sobre el mismo par de niveles; marca PERSISTENTE solo entonces, reiniciando ante desincronización, desaparición, cambios de precio, nuevos snapshots y reconexión. La persistencia corresponde a niveles visibles, no identidad de órdenes.
 - 🟢 30 Separación de datos recientes y desfase entre fuentes (máximo 5 s para coincidencias).
 
 ## Alertas y Android
@@ -74,4 +76,4 @@
 - 🔴 39 Validación prolongada de sesiones Android.
 - 🔴 40 Comprobación automática de publicación.
 
-**Estado tras Bloque E:** 28 ítems completamente terminados / 40 propuestos (70%); 12 pendientes. VERDE significa función implementada, probada focalmente y publicada, no rentabilidad ni validez predictiva. Los controles de reconexión de larga duración y Android físico (#35, #39) siguen ROJOS. El dato temporal «vigente» significa reciente según su intervalo esperado, no garantiza que sea completo.
+**Estado tras Bloque F:** 30 ítems completamente terminados / 40 propuestos (75%); 10 pendientes. VERDE significa implementado, probado y publicado; no significa que existan coincidencias continuas en el mercado real ni predictibilidad. #35 (reconexión integral), #39 (Android físico prolongado) y los demás pendientes permanecen ROJOS.

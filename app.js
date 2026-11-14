@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],breakoutSuppressed:0,lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],candlesTf:'',candleSource:'',candlesRequest:0,liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,sessionStart:Date.now(),tradeIds:new Map(),liqFingerprints:new Map(),tradeDuplicates:0,liqDuplicates:0,tradeRejected:0,liqRejected:0,lastTradeEventTs:0,lastTradeSeq:-1,tradeWindowTruncated:false,liqWindowTruncated:false,printPolicyCache:null,lastFlowPrune:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,oiAligned:null,zoneSeen:new Map(),wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallMetrics:new Map(),wallEvents:[],wallDisappeared:new Map(),wallReappearances:[],wallPolicy:null,wallWatch:new Map(),breakouts:[],breakoutSuppressed:0,lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
 const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function model(){
@@ -68,7 +68,25 @@ function activeBybitCandle(now=Date.now()){
  return state.candles.find(c=>Number(c[0])===start&&Number(c[1])>0)||null;
 }
 function renderPrice(){if(!state.price)return;$('price').textContent=usd(state.price);$('lastTick').textContent='Última operación: '+time(state.lastPriceAt);$('clock').textContent='Ahora '+time(Date.now());$('priceDelta').textContent=state.priceAtFirst?pct((state.price/state.priceAtFirst-1)*100):'—';const c=activeBybitCandle();$('change').textContent=c?pct((state.price/Number(c[1])-1)*100):'—'}
-function renderLiq(){let rows=state.liq.slice(0,12).map(x=>`<div class="alertrow"><span class="${x.side==='long'?'down':'up'}">${x.side.toUpperCase()}</span> · ${usd(x.notional)} · ${usd(x.price)} · <span class="muted">${time(x.ts)}</span></div>`).join('');$('liqLong').textContent=usd(state.longLiq);$('liqShort').textContent=usd(state.shortLiq);$('events').innerHTML=rows||'<div class="empty">Todavía no se ha recibido ninguna liquidación ejecutada.</div>'}
+
+function renderLiq(now=Date.now()){
+ const win90=liquidationWindow(90000,now),win5=liquidationWindow(300000,now);
+ $('liqLong').textContent=usd(state.longLiq);$('liqShort').textContent=usd(state.shortLiq);
+ $('liq90Detail').textContent='90 s · longs '+usd(win90.long)+' / shorts '+usd(win90.short)+
+   ' · '+win90.count+' eventos observados';
+ $('liq5Detail').textContent='5 min · longs '+usd(win5.long)+' / shorts '+usd(win5.short)+
+   ' · '+win5.count+' eventos observados';
+ $('liqDedupStatus').textContent='Repeticiones aproximadas '+state.liqDuplicates+
+   ' · inválidas/atrasadas '+state.liqRejected+
+   (state.liqWindowTruncated?' · eventos en memoria acotados':'')+
+   ' · sin ID único, coincidencias exactas pueden corresponder a eventos distintos';
+ const rows=state.liq.filter(x=>now-x.ts>=0&&now-x.ts<300000)
+   .sort((a,b)=>b.ts-a.ts).slice(0,12);
+ $('events').innerHTML=rows.map(x=>'<div class="alertrow"><span class="'+
+  (x.side==='long'?'down':'up')+'">'+x.side.toUpperCase()+'</span> · '+usd(x.notional)+
+  ' · '+usd(x.price)+' · <span class="muted">'+time(x.ts)+'</span></div>').join('')||
+  '<div class="empty">Todavía no se han recibido liquidaciones públicas en los últimos 5 minutos.</div>'
+}
 function wallAge(ms){let sec=Math.max(0,Math.floor(ms/1000));return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0')}
 function renderBook(){
  const now=Date.now();
@@ -227,74 +245,79 @@ function drawLiquidityHeat(){
 
 // Heuristic, not proof of a passive order or a specific whale: compare aggressor
 // side imbalance against actual price displacement over the same 90-second sample.
+
 function evaluateAbsorption(now=Date.now()){
  if(now-state.lastPriceAt>20000||!state.wsOk){
   $('absorptionStatus').textContent='Datos recientes no disponibles';
-  $('absorptionDetail').textContent='Se requiere conexión activa y operaciones recientes de Bybit';
+  $('absorptionDetail').textContent='Se requieren operaciones Bybit recientes y sus horas de ejecución';
   return
  }
- let buy=0,sell=0,n=0,first=null,last=null;
- for(const t of state.trades){
-  if(now-t.ts>90000||t.ts>now+5000)continue;
-  n++;
-  if(t.buy)buy+=t.usdt;else sell+=t.usdt;
-  if(!first||t.ts<first.ts)first=t;
-  if(!last||t.ts>last.ts)last=t
- }
- const duration=first&&last?last.ts-first.ts:0,total=buy+sell;
- if(!first||n<12||duration<25000||total<500000){
+ const w=flowWindow(tradesWithin(90000,now));
+ if(w.count<12||w.duration<25000||w.total<500000){
   $('absorptionStatus').textContent='Reuniendo datos (90 s)';
-  $('absorptionDetail').textContent='Se necesitan al menos 25 s observados, 12 operaciones y US$500.000 de volumen agresivo en la ventana';
+  $('absorptionDetail').textContent='Ventana móvil 90 s: mínimo 25 s observados, 12 ejecuciones y US$500.000';
   return
  }
- const share=Math.max(buy,sell)/total,movePct=(last.price/first.price-1)*100;
- const enough=share>=.72;
- const buyAbsorption=enough&&sell>buy&&movePct>=-.035;
- const sellAbsorption=enough&&buy>sell&&movePct<=.035;
- const priceStr=(movePct>=0?'+':'')+movePct.toFixed(3)+'%';
- const sideText=sell>buy?'ventas':'compras';
+ const share=Math.max(w.buy,w.sell)/w.total;
+ const tolerance=Math.max(.025,Math.min(.12,w.rangePct*.25));
+ const buyAbsorption=share>=.68&&w.sell>w.buy&&w.movePct>=-tolerance;
+ const sellAbsorption=share>=.68&&w.buy>w.sell&&w.movePct<=tolerance;
+ const sideText=w.buy>w.sell?'compras':'ventas';
  if(buyAbsorption){
   $('absorptionStatus').textContent='Posible absorción compradora';
-  $('absorptionStatus').className='num up';
+  $('absorptionStatus').className='num up'
  }else if(sellAbsorption){
   $('absorptionStatus').textContent='Posible absorción vendedora';
-  $('absorptionStatus').className='num down';
+  $('absorptionStatus').className='num down'
  }else{
   $('absorptionStatus').textContent='Sin absorción destacable';
-  $('absorptionStatus').className='num';
+  $('absorptionStatus').className='num'
  }
- $('absorptionDetail').textContent=(100*share).toFixed(0)+'% '+sideText+' agresivas · '+usd(total)+' negociados · BTC '+priceStr+' durante '+Math.round(duration/1000)+' s. '+(buyAbsorption||sellAbsorption?'Desequilibrio sin desplazamiento proporcional. Indicio, no confirmación.':'El flujo no cumple el criterio de absorción.');
+ $('absorptionDetail').textContent=(100*share).toFixed(0)+'% '+sideText+
+  ' agresivas · '+usd(w.total)+' en '+Math.round(w.duration/1000)+' s; cambio BTC '+pct(w.movePct)+
+  ' (mismos primeros y últimos trades); rango '+pct(w.rangePct)+
+  ', tolerancia de desplazamiento '+tolerance.toFixed(3)+'%. Descripción, no prueba de órdenes ocultas.';
  if(buyAbsorption||sellAbsorption){
-  const label=buyAbsorption?'compradora':'vendedora';
-  alertUser('Posible absorción '+label+': '+(share*100).toFixed(0)+'% '+sideText+' y precio '+priceStr,'absorption-'+label,180000)
+  alertUser('Posible absorción '+(buyAbsorption?'compradora':'vendedora')+
+   ' · presión '+(share*100).toFixed(0)+'% · BTC '+pct(w.movePct),
+   'absorption-'+(buyAbsorption?'buy':'sell'),180000)
  }
 }
-
-
 // Large prints are public tape records, not identified wallets or unique traders.
 // "Sequence" means multiple trades in the same aggressor direction, NOT one whale.
+
 function renderAdvancedWhales(now=Date.now()){
- const root=$('largeFlow');
- if(!root)return;
- const recent=state.trades.filter(t=>now-t.ts<=90000&&now-t.ts>=0&&t.usdt>=100000).sort((a,b)=>b.ts-a.ts);
- const bySide=(buy)=>recent.filter(t=>t.buy===buy);
- const long=bySide(true),short=bySide(false);
- const sum=x=>x.reduce((a,t)=>a+t.usdt,0);
- const buyer=sum(long),seller=sum(short);
- $('largeBuy').textContent=usd(buyer)+' · '+long.length+' ejec.';
- $('largeSell').textContent=usd(seller)+' · '+short.length+' ejec.';
- const candidate=(count,value)=>count>=3&&value>=500000;
- const buySeq=candidate(long.length,buyer),sellSeq=candidate(short.length,seller);
+ const root=$('largeFlow');if(!root)return;
+ const r=evaluateTradeSequences(now),p=r.policy;
+ const buyer=r.large.filter(t=>t.buy).reduce((a,t)=>a+t.usdt,0);
+ const seller=r.large.filter(t=>!t.buy).reduce((a,t)=>a+t.usdt,0);
+ $('largeBuy').textContent=usd(buyer)+' · '+r.large.filter(t=>t.buy).length+' ejec.';
+ $('largeSell').textContent=usd(seller)+' · '+r.large.filter(t=>!t.buy).length+' ejec.';
+ $('largeFlowThreshold').textContent='Umbral relativo '+usd(p.printMin)+' por ejecución; racha desde '+
+  usd(p.sequenceMin)+' · '+(p.provisional?'calibración inicial con mínimo de seguridad':'referencia P95 de 5 min');
  if(!state.wsOk||now-state.lastPriceAt>20000){
   $('largeFlowStatus').textContent='Datos de operaciones no disponibles';
-  root.innerHTML='<div class="empty">Esperando flujo en vivo.</div>';
-  return
+  root.innerHTML='<div class="empty">Esperando flujo en vivo.</div>';return
  }
- $('largeFlowStatus').textContent=buySeq&&sellSeq?'Rachas en ambos lados':buySeq?'Racha compradora detectada':sellSeq?'Racha vendedora detectada':'Sin rachas grandes detectadas';
- root.innerHTML=recent.slice(0,6).map(t=>'<div class="alertrow"><span class="'+(t.buy?'up':'down')+'">'+(t.buy?'COMPRA':'VENTA')+'</span> · '+usd(t.usdt)+' · '+usd(t.price)+' <span class="muted">'+time(t.ts)+'</span></div>').join('')||'<div class="empty">Sin ejecuciones individuales ≥US$100.000 durante los últimos 90 s.</div>';
- if((buySeq||sellSeq)&&now-state.lastLargeAlertAt>300000){
-  state.lastLargeAlertAt=now;
-  alertUser('Racha pública de operaciones grandes ('+(buySeq?'compras':'')+(buySeq&&sellSeq?'/':'')+(sellSeq?'ventas':'')+') en 90 s','large-flow',300000)
+ const sequences=r.grouped.sort((a,b)=>b.at(-1).ts-a.at(-1).ts);
+ $('largeFlowStatus').textContent=sequences.length+' racha(s) observada(s) · '+
+  r.isolated.length+' operaciones grandes no agrupadas (90 s)';
+ const rows=sequences.slice(0,4).map(group=>{
+  const value=group.reduce((a,t)=>a+t.usdt,0),first=group[0],last=group.at(-1);
+  return '<div class="alertrow"><strong>RACHA '+(first.buy?'COMPRADORA':'VENDEDORA')+
+   '</strong> · '+group.length+' ejec. · '+usd(value)+' · '+wallAge(last.ts-first.ts)+
+   ' · '+usd(first.price)+' → '+usd(last.price)+'</div>'
+ });
+ for(const t of r.isolated.sort((a,b)=>b.ts-a.ts).slice(0,3)){
+  rows.push('<div class="alertrow">Aislada '+(t.buy?'COMPRA':'VENTA')+' · '+
+   usd(t.usdt)+' · '+usd(t.price)+' · '+time(t.ts)+'</div>')
+ }
+ root.innerHTML=rows.join('')||'<div class="empty">Sin operaciones grandes ni rachas observadas en 90 s.</div>';
+ if(sequences.length&&now-state.lastLargeAlertAt>300000){
+  const g=sequences[0];state.lastLargeAlertAt=now;
+  alertUser('Racha '+(g[0].buy?'compradora':'vendedora')+' · '+
+   g.length+' operaciones; '+usd(g.reduce((a,t)=>a+t.usdt,0))+
+   ' (sin identificar operador)','large-flow',300000)
  }
 }
 const tfPeriod=()=>({'5':'5min','15':'15min','30':'30min','60':'1h','240':'4h'})[state.tf];
@@ -359,7 +382,7 @@ function renderMarketSummary(now=Date.now()){
   $('summaryStamp').textContent='Datos insuficientes';
   return
  }
- const recent=state.trades.filter(t=>now-t.ts<300000&&now-t.ts>=0);
+ const recent=tradesWithin(300000,now);
  let buy=0,sell=0;
  for(const t of recent){if(t.buy)buy+=t.usdt;else sell+=t.usdt}
  const total=buy+sell,lines=[];
@@ -753,8 +776,153 @@ function resetWallTracking(){
  state.wallWatch.clear();
 }
 
-function renderTrades(){let now=Date.now();state.trades=state.trades.filter(t=>now-t.ts<300000);state.whales=state.whales.filter(t=>now-t.ts<300000);let buy=0,sell=0;for(const t of state.trades){if(t.buy)buy+=t.usdt;else sell+=t.usdt}$('buyVol').textContent=usd(buy);$('sellVol').textContent=usd(sell);$('delta').textContent=(buy-sell>=0?'+':'')+usd(buy-sell);const cvd=state.sessionCvd;$('cvd').textContent=(cvd>=0?'+':'')+usd(cvd);$('whales').innerHTML=state.whales.slice(0,5).map(x=>`<div class="alertrow"><span class="${x.buy?'up':'down'}">${x.buy?'COMPRA':'VENTA'}</span> · ${usd(x.usdt)} · ${usd(x.price)} <span class="muted">${time(x.ts)}</span></div>`).join('')||'<div class="empty">No se han observado operaciones por encima del umbral.</div>'}
-function onTrade(d){const entries=Array.isArray(d.data)?d.data:[];for(const x of entries){let p=asNum(x.p),q=asNum(x.v),ts=asNum(x.T)||Date.now(),buy=x.S==='Buy';if(!p||!q)continue;state.lastPrice=state.price;state.price=p;state.lastPriceAt=Date.now();if(!state.priceAtFirst)state.priceAtFirst=p;const t={price:p,usdt:p*q,buy,ts};state.trades.push(t);state.sessionCvd+=(buy?1:-1)*t.usdt;if(t.usdt>=state.threshold){state.whales.unshift(t);state.whales=state.whales.slice(0,20);alertUser(`${buy?'Compra':'Venta'} agresiva grande ${usd(t.usdt)} a ${usd(p)}`,'whale-'+ts+'-'+p,0)}}if(state.trades.length>30000)state.trades=state.trades.slice(-15000);if(Date.now()-(state.lastTradeRenderAt||0)>1000){state.lastTradeRenderAt=Date.now();renderPrice();renderTrades()}if(Date.now()-state.lastBreakCheckAt>1000){state.lastBreakCheckAt=Date.now();checkBreakouts();renderBreakouts()}if(Date.now()-(state.lastModelAt||0)>30000){state.lastModelAt=Date.now();model()}}
+
+// Bybit trade messages include a unique trade ID. Liquidations have no event ID:
+// a fingerprint prevents identical repeated packets but may conflate truly identical
+// executions, so it is not proof of a uniquely identified liquidation event.
+const FLOW_KEEP_MS=300000,FLOW_IDS_KEEP_MS=360000,FLOW_CAP=45000,LIQ_CAP=8000;
+function compactEventIds(map,now=Date.now(),max=75000){
+ for(const [key,ts] of map){if(now-ts>FLOW_IDS_KEEP_MS)map.delete(key)}
+ while(map.size>max)map.delete(map.keys().next().value)
+}
+function trimObservedFlows(now=Date.now()){
+ state.trades=state.trades.filter(t=>t.ts>=now-FLOW_KEEP_MS&&t.ts<=now+5000);
+ state.liq=state.liq.filter(t=>t.ts>=now-FLOW_KEEP_MS&&t.ts<=now+5000);
+ state.whales=state.whales.filter(t=>t.ts>=now-FLOW_KEEP_MS&&t.ts<=now+5000);
+ if(state.trades.length>FLOW_CAP){
+  state.tradeWindowTruncated=true;
+  state.trades.sort((a,b)=>a.ts-b.ts||(a.seq||0)-(b.seq||0));
+  state.trades=state.trades.slice(-FLOW_CAP)
+ }
+ if(state.liq.length>LIQ_CAP){
+  state.liqWindowTruncated=true;
+  state.liq.sort((a,b)=>a.ts-b.ts);
+  state.liq=state.liq.slice(-LIQ_CAP)
+ }
+ compactEventIds(state.tradeIds,now,75000);
+ compactEventIds(state.liqFingerprints,now,18000)
+}
+function tradesWithin(durationMs,now=Date.now()){
+ return state.trades.filter(t=>now-t.ts>=0&&now-t.ts<=durationMs)
+}
+function flowWindow(trades){
+ let buy=0,sell=0,first=null,last=null,min=Infinity,max=0;
+ const precedes=(a,b)=>a.ts<b.ts||(a.ts===b.ts&&(a.seq||0)<(b.seq||0));
+ for(const t of trades){
+  if(t.buy)buy+=t.usdt;else sell+=t.usdt;
+  if(!first||precedes(t,first))first=t;
+  if(!last||precedes(last,t))last=t;
+  min=Math.min(min,t.price);max=Math.max(max,t.price)
+ }
+ const total=buy+sell,move=first&&last?(last.price/first.price-1)*100:0;
+ const range=first&&min>0?(max/min-1)*100:0;
+ return {buy,sell,total,count:trades.length,first,last,
+  duration:first&&last?last.ts-first.ts:0,movePct:move,rangePct:range,
+  buyShare:total?buy/total:0}
+}
+function adaptivePrintPolicy(now=Date.now()){
+ if(state.printPolicyCache&&now-state.printPolicyCache.at<5000){
+  const policy=state.printPolicyCache.policy;
+  return {...policy,individualMin:Math.max(state.threshold,policy.printMin)}
+ }
+ const sample=tradesWithin(FLOW_KEEP_MS,now),n=sample.length;
+ let sorted=[],baseline=null;
+ if(n>=35){
+  const span=flowWindow(sample).duration;
+  if(span>=30000){
+   sorted=sample.map(t=>t.usdt).filter(v=>Number.isFinite(v)&&v>0).sort((a,b)=>a-b);
+   baseline=sorted[Math.floor((sorted.length-1)*.95)]
+  }
+ }
+ const printMin=baseline===null?100000:Math.max(100000,Math.min(900000,baseline*3));
+ const policy={printMin,sequenceMin:Math.max(300000,printMin*2.5),baseline,n,provisional:baseline===null};
+ state.printPolicyCache={at:now,policy};
+ return {...policy,individualMin:Math.max(state.threshold,printMin)}
+}
+function evaluateTradeSequences(now=Date.now()){
+ const policy=adaptivePrintPolicy(now),large=tradesWithin(90000,now)
+  .filter(t=>t.usdt>=policy.printMin).sort((a,b)=>a.ts-b.ts||(a.seq||0)-(b.seq||0));
+ const runs=[];let current=[];
+ const flush=()=>{if(current.length){runs.push(current);current=[]}};
+ for(const t of large){
+  const prior=current.at(-1);
+  const near=prior&&t.buy===prior.buy&&t.ts-prior.ts<=12000&&
+   Math.abs(t.price/prior.price-1)<=.0006;
+  if(!near)flush();
+  current.push(t)
+ }
+ flush();
+ const grouped=runs.filter(group=>group.length>=3&&group.reduce((sum,t)=>sum+t.usdt,0)>=policy.sequenceMin);
+ const ids=new Set(grouped.flatMap(g=>g.map(t=>t.id)));
+ const isolated=large.filter(t=>!ids.has(t.id));
+ return {policy,large,grouped,isolated}
+}
+function renderFlowStatus(now=Date.now()){
+ const w90=flowWindow(tradesWithin(90000,now)),w5=flowWindow(tradesWithin(300000,now));
+ $('flow90Detail').textContent='90 s · '+usd(w90.total)+' · '+w90.count+' ejec. · precio '+
+  (w90.count>1?pct(w90.movePct):'sin desplazamiento medible');
+ $('flow5Detail').textContent='5 min · '+usd(w5.total)+' · '+w5.count+' ejec. · precio '+
+  (w5.count>1?pct(w5.movePct):'sin desplazamiento medible');
+ $('flowSessionDetail').textContent='CVD desde abrir: '+(state.sessionCvd>=0?'+':'')+
+  usd(state.sessionCvd)+' · solo operaciones recibidas; los cortes de conexión no se reconstruyen';
+ $('flowDedupStatus').textContent='Eventos descartados: '+state.tradeDuplicates+
+  ' IDs repetidos · '+state.tradeRejected+' inválidos/atrasados'+
+  (state.tradeWindowTruncated?' · ventana 5m acotada; totales mínimos':'')
+}
+
+
+function renderTrades(){
+ const now=Date.now();trimObservedFlows(now);
+ const w=flowWindow(tradesWithin(300000,now)),large=state.whales.filter(t=>now-t.ts>=0&&now-t.ts<300000)
+  .sort((a,b)=>b.ts-a.ts);
+ $('buyVol').textContent=usd(w.buy);$('sellVol').textContent=usd(w.sell);
+ $('delta').textContent=(w.buy-w.sell>=0?'+':'')+usd(w.buy-w.sell);
+ $('cvd').textContent=(state.sessionCvd>=0?'+':'')+usd(state.sessionCvd);
+ $('whales').innerHTML=large.slice(0,5).map(x=>'<div class="alertrow"><span class="'+
+  (x.buy?'up':'down')+'">'+(x.buy?'COMPRA':'VENTA')+'</span> · '+usd(x.usdt)+' · '+
+  usd(x.price)+' <span class="muted">'+time(x.ts)+'</span></div>').join('')||
+  '<div class="empty">Sin operaciones individuales por encima del umbral configurado.</div>';
+ renderFlowStatus(now)
+}
+function onTrade(d){
+ const entries=Array.isArray(d.data)?d.data:[],now=Date.now();
+ // Exchange documents that T is the match time, i is the trade ID and S is taker side.
+ for(const x of entries){
+  const p=Number(x.p),q=Number(x.v),ts=Number(x.T),id=typeof x.i==='string'?x.i:'',seq=Number(x.seq)||0;
+  if(x.s&&x.s!=='BTCUSDT')continue;
+  if(!(p>0&&q>0&&Number.isFinite(p)&&Number.isFinite(q)&&Number.isFinite(ts)&&
+   ts>=state.sessionStart-5000&&ts>=now-FLOW_KEEP_MS&&ts<=now+5000&&id&&
+   (x.S==='Buy'||x.S==='Sell'))){state.tradeRejected++;continue}
+  if(state.tradeIds.has(id)){state.tradeDuplicates++;continue}
+  state.tradeIds.set(id,now);
+  const t={id,price:p,usdt:p*q,buy:x.S==='Buy',ts,seq};
+  state.trades.push(t);
+  state.sessionCvd+=(t.buy?1:-1)*t.usdt;
+  // Delayed or out-of-order packets must never roll the live price backwards.
+  if(now-ts<=18000&&(ts>state.lastTradeEventTs||
+    (ts===state.lastTradeEventTs&&seq>=state.lastTradeSeq))){
+   state.lastPrice=state.price;state.price=p;state.lastPriceAt=now;
+   if(!state.priceAtFirst)state.priceAtFirst=p;
+   state.lastTradeEventTs=ts;state.lastTradeSeq=seq
+  }
+  const policy=adaptivePrintPolicy(now);
+  if(t.usdt>=policy.individualMin&&now-ts<=15000){
+   state.whales.unshift(t);state.whales=state.whales.slice(0,35);
+   alertUser((t.buy?'Compra':'Venta')+' agresiva grande '+usd(t.usdt)+' a '+usd(p)+
+    ' (umbral observado '+usd(policy.individualMin)+')','whale-'+id,0)
+  }
+ }
+ if(now-(state.lastFlowPrune||0)>5000||state.trades.length>FLOW_CAP+300){
+  state.lastFlowPrune=now;trimObservedFlows(now)
+ }
+ if(now-(state.lastTradeRenderAt||0)>1000){
+  state.lastTradeRenderAt=now;renderPrice();renderTrades()
+ }
+ if(now-state.lastBreakCheckAt>1000){
+  state.lastBreakCheckAt=now;checkBreakouts();renderBreakouts()
+ }
+ if(now-(state.lastModelAt||0)>30000){state.lastModelAt=now;model()}
+}
 function onBook(d){
  const a=d.data;
  if(!a||!Array.isArray(a.b)||!Array.isArray(a.a))return;
@@ -799,8 +967,34 @@ function onBook(d){
  if(!state.lastWallCleanupAt||now-state.lastWallCleanupAt>15000){state.lastWallCleanupAt=now;cleanupWallHistory(now)}
  if(now-state.lastBookRenderAt>500){state.lastBookRenderAt=now;renderBook()}
 }
-function onLiquidation(d){if(!Array.isArray(d.data))return;for(const l of d.data){let p=asNum(l.p),q=asNum(l.v);if(!p||!q)continue;let side=l.S==='Buy'?'long':'short',v=p*q,ts=asNum(l.T)||Date.now();if(side==='long')state.longLiq+=v;else state.shortLiq+=v;state.liq.unshift({side,price:p,notional:v,ts})}state.liq=state.liq.slice(0,100);state.lastLiqAt=Date.now();renderLiq()}
 
+function liquidationWindow(durationMs,now=Date.now()){
+ const out={long:0,short:0,count:0};
+ for(const x of state.liq){
+  if(now-x.ts<0||now-x.ts>durationMs)continue;
+  out[x.side]+=x.notional;out.count++
+ }
+ return out
+}
+function onLiquidation(d){
+ if(!Array.isArray(d.data))return;
+ const now=Date.now();
+ for(const l of d.data){
+  const p=Number(l.p),q=Number(l.v),ts=Number(l.T),side=l.S==='Buy'?'long':l.S==='Sell'?'short':'';
+  if(l.s&&l.s!=='BTCUSDT')continue;
+  if(!(p>0&&q>0&&Number.isFinite(ts)&&ts>=state.sessionStart-5000&&
+       ts>=now-FLOW_KEEP_MS&&ts<=now+5000&&side)){state.liqRejected++;continue}
+  // There is no guaranteed unique liquidation ID. Exact fingerprint is best effort.
+  const fp=[l.s||'BTCUSDT',l.S,String(ts),String(p),String(q)].join('|');
+  if(state.liqFingerprints.has(fp)){state.liqDuplicates++;continue}
+  state.liqFingerprints.set(fp,now);
+  const v=p*q;
+  if(side==='long')state.longLiq+=v;else state.shortLiq+=v;
+  state.liq.push({side,price:p,notional:v,ts,fp});
+  state.lastLiqAt=now
+ }
+ trimObservedFlows(now);renderLiq()
+}
 // Binance partial book depth20 is a full top-20 snapshot, never a diff.
 function normalizeBookRows(rows,descending){
  if(!Array.isArray(rows))return [];
@@ -1081,4 +1275,4 @@ async function getHourlySentiment(){
  }finally{state.hourlyInFlight=false}
 }
 
-function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getOfficialFearGreed,3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderMarketSummary(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getHourlySentiment();getOfficialFearGreed();getOi();getCandles();if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();
+function init(){tabs();restore();$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();setInterval(getOiSeries,60000);setInterval(getAccountRatio,60000);setInterval(getFunding,120000);setInterval(getOfficialFearGreed,3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(getHistory,300000);setInterval(getOi,60000);setInterval(getCandles,60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();$('clock').textContent='Ahora '+time(now);let fresh=state.wsOk&&now-state.lastPriceAt<20000;$('connection').textContent=fresh?'EN VIVO':state.wsOk?'SIN OPERACIONES RECIENTES':'SIN CONEXIÓN';$('connection').className='pill '+(fresh?'good':'warn');renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){getHourlySentiment();getOfficialFearGreed();getOi();getCandles();if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();getAccountRatio();getFunding();drawLiquidityHeat();if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({op:'ping'}))}});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();

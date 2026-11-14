@@ -14,6 +14,8 @@
 
 **Bloque C — rupturas (14/11/2026):** #12 cruce de operaciones separado del cierre confirmado/rechazado de una vela Bybit cerrada en el marco elegido (se exige la vela siguiente; si hay fallback Binance, no se confirma); #13 retesteo observado con prueba de acercamiento al nivel y reacción posterior sin confundirlo con cierre; #14 umbral de desplazamiento relativo al rango medio de 3–4 velas cerradas, acotado entre 0,04% y 0,35%, bloqueado si falta evidencia; #15 deduplicación de cruces cercanos de la misma dirección durante 5 minutos por tolerancia relativa al precio y al umbral, con historial limitado y contadores de suprimidos. Pruebas focales: `node tests/v2_breakouts_c.test.cjs` (27 casos). Integración: `node tests/v2_breakouts_mobile.cjs` (390×844, 5 temporalidades, feeds Bybit/Binance, 0 errores JavaScript). Las comprobaciones de cierre y retesteo se hicieron también con eventos simulados; **no se valida todavía fiabilidad predictiva ni sesiones prolongadas**.
 
+**Bloque D — operaciones, flujo y liquidaciones (14/11/2026):** #16 rachas de ejecuciones grandes del mismo lado separadas de prints aislados (máximo 12 s entre ejecuciones y diferencia relativa de precios ≤0,06%, sin atribuir operador); #17 presión agresora frente a desplazamiento real entre primera y última operación de la misma ventana de 90 s; #18 referencia de importe relativo por percentil 95 de las operaciones de 5 min, actualizada como máximo cada 5 s, con mínimos y manteniendo la configuración manual de alertas individuales como suelo; #19 ventanas independientes 90 s, 5 min y sesión (CVD y liquidaciones recibidas), con aviso de pérdida de cobertura y límites de memoria; #20 trades deduplicados por ID único de Bybit, secuencia temporal ordenada y precio en vivo protegido frente a entregas atrasadas, liquidaciones deduplicadas **solo aproximadamente** por huella de campos porque no existe identificador público único. Pruebas focales: `node tests/v2_flow_d.test.cjs` (27 casos). Integración: `node tests/v2_flow_mobile.cjs` (viewport móvil 390×844, datos BTCUSDT, 0 errores JS; más de 1000 operaciones reales recibidas; no se observaron liquidaciones reales durante la prueba corta). Pruebas de liquidaciones y de secuencias significativas reproducidas con datos sintéticos; no se garantiza precisión predictiva ni se confunde con pruebas prolongadas en Android físico (#39 ROJO).
+
 ## Libro de órdenes y bloqueos
 - 🟢 01 Agrupar liquidez en bandas contiguas próximas por lado, sumando importes visibles de Bybit sin tratarlos como una orden única. Rangos y umbrales visibles en pantalla.
 - 🟢 02 Registrar incrementos y reducciones relevantes de liquidez visible, importes antes/después y acumulados observados por nivel, con historial limitado y panel de evolución.
@@ -36,11 +38,11 @@
 - 🟢 15 Agrupa cruces del mismo lado y precios cercanos en ventana de 5 min con tolerancia relativa a precio y umbral, sin suprimir niveles alejados; prioridad al muro activo mayor, contador de duplicados y memoria acotada.
 
 ## Grandes operaciones y liquidaciones
-- 🔴 16 Secuencias frente a transacciones aisladas.
-- 🔴 17 Agresión frente a desplazamiento resultante.
-- 🔴 18 Alertas relativas al volumen habitual.
-- 🔴 19 Ventanas y acumulados separados.
-- 🔴 20 Deduplicación y orden temporal de eventos.
+- 🟢 16 Distingue rachas de ≥3 operaciones grandes del mismo lado próximas en tiempo y precio de ejecuciones grandes aisladas; muestra valor, número y desplazamiento, sin identificar operadores.
+- 🟢 17 Compara compras/ventas agresivas con desplazamiento entre primera y última operación del **mismo intervalo de 90 s**, mostrando rango y umbral contextual para posible absorción, sin certificar órdenes ocultas.
+- 🟢 18 Referencia adaptativa de grandes operaciones según percentil 95 del tamaño de prints en 5 min con mínimas de seguridad, actualizada como máximo cada 5 s para evitar consumo excesivo. El umbral individual configurable por el usuario sigue siendo suelo; las rachas usan mínimo propio adaptable.
+- 🟢 19 Flujos separados para 90 s, 5 min y CVD de sesión; liquidaciones 90 s, 5 min y acumulados de eventos recibidos durante la sesión, sin extrapolar periodos desconectados, con límites de memoria indicados.
+- 🟢 20 Dedup de trades mediante el campo único Bybit `i` y validación de timestamps; eventos atrasados no retroceden el precio actual y las ventanas ordenan por momento de ejecución. Liquidaciones usan huella aproximada T/S/p/v (la fuente no proporciona ID único; dos eventos idénticos podrían confundirse).
 
 ## OI, funding y sentimiento
 - 🟢 21 Comparación precio–OI con dos muestras consecutivas de OI y vela Bybit cerrada exactamente correspondiente, comprobada en 5m/15m/30m/1h/4h. Se rechazan velas abiertas, huecos, resultados atrasados o de otro exchange; zonas hipotéticas históricas también ancladas a intervalos cerrados. Datos descriptivos, no inferencia causal.
@@ -70,4 +72,4 @@
 - 🔴 39 Validación prolongada de sesiones Android.
 - 🔴 40 Comprobación automática de publicación.
 
-**Estado tras Bloque C:** 19 ítems completamente terminados / 40 propuestos (47,5%); 21 pendientes. Los estados verdes indican implementación, pruebas focales y publicación, **no** acierto predictivo. Pruebas de mercado prolongadas, reconexión completa y rendimiento Android (#35, #39) siguen ROJAS.
+**Estado tras Bloque D:** 24 ítems completamente terminados / 40 propuestos (60%); 16 pendientes. VERDE = implementado, probado focalmente y publicado. El resultado no significa acierto predictivo ni validación económica. Seguimiento continuo, reconexiones prolongadas y pruebas en Android físico (#35, #39) siguen ROJAS.

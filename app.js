@@ -1,5 +1,5 @@
 'use strict';
-const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,wallSeen:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallWatch:new Map(),breakouts:[],lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
+const $=id=>document.getElementById(id);const state={tf:'5',price:0,lastPrice:0,priceAtFirst:0,priceAtTf:0,oi:0,oiFirst:0,oiSource:'',candles:[],liq:[],trades:[],whales:[],longLiq:0,shortLiq:0,bids:new Map(),asks:new Map(),ws:null,liqws:null,restOk:false,wsOk:false,liqOk:false,alerts:[],lastAlerts:new Map(),lastPriceAt:0,lastBookAt:0,lastLiqAt:0,lastOiAt:0,model:[],threshold:1e6,distance:.3,oiHistory:[],fiveCandles:[],lastHistoryAt:0,sessionCvd:0,oiSeries:[],oiSeriesTf:'',oiSeriesRequest:0,oiSeriesAt:0,wallSeen:new Map(),wallQualifiedSince:new Map(),lastBookRenderAt:0,heatSamples:[],lastHeatAt:0,lastTradeRenderAt:0,absorption:null,fundingRate:null,fundingNextAt:0,fundingAt:0,lastFundingRate:null,lastFundingAt:0,ratioLong:null,ratioShort:null,ratioAt:0,ratioTf:'',ratioReq:0,lastLargeAlertAt:0,wallDrops:[],wallDropCooldown:new Map(),wallWatch:new Map(),breakouts:[],lastBreakCheckAt:0,binanceWs:null,binanceBids:[],binanceAsks:[],binanceLastAt:0,binanceReconn:null,lastCompareAt:0,lastWallArrivalAt:0,lastWallDropAlertAt:0,fngAt:0,fngValue:null,fngPrev:null,hourlySlot:-1,hourlyInFlight:false,hourlyAt:0};
 const cash=n=>Number.isFinite(n)?new Intl.NumberFormat('en-US',{maximumFractionDigits:0}).format(n):'—';const usd=n=>Number.isFinite(n)?'$'+cash(n):'—';const pct=n=>Number.isFinite(n)?(n>=0?'+':'')+n.toFixed(2)+'%':'—';const time=ms=>new Date(ms).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});const status=(id,label,ok)=>{$(id).textContent=label;$(id).className=ok?'up':'gold'};const asNum=n=>{let v=Number(n);return Number.isFinite(v)?v:0};function alertUser(txt,key,limit=60000){let now=Date.now();if(now-(state.lastAlerts.get(key)||0)<limit)return;state.lastAlerts.set(key,now);state.alerts.unshift({ts:now,txt});state.alerts=state.alerts.slice(0,12);$('alerts').innerHTML=state.alerts.map(a=>`<div class="alertrow">${time(a.ts)} · ${escapeHtml(a.txt)}</div>`).join('')}function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 
 function model(){
@@ -10,7 +10,7 @@ function model(){
  let used=0,added=0;
  for(let i=1;i<oi.length;i++){
   const prev=oi[i-1],cur=oi[i],inc=cur.v-prev.v;
-  if(cur.ts<cutoff||cur.ts>Date.now()+300000||inc<=0)continue;
+  if(cur.ts<cutoff||cur.ts>Date.now()+300000||inc<=0||Math.abs(cur.ts-prev.ts-300000)>30000)continue;
   const t=Math.floor((cur.ts-1)/300000)*300000,anchor=closeByStart.get(t);
   if(!Number.isFinite(anchor)||anchor<=0)continue;
   used++;added+=inc;
@@ -314,8 +314,8 @@ function rankWallLevels(now=Date.now()){
  const combined=[...state.bids].map(([p,q])=>({p:+p,v:+p*+q,side:'bid',key:'B:'+p}))
  .concat([...state.asks].map(([p,q])=>({p:+p,v:+p*+q,side:'ask',key:'A:'+p})));
  return combined.filter(x=>Number.isFinite(x.v)&&x.v>0&&x.p>0&&Math.abs(x.p/state.price-1)<=WALL_MAX_DIST)
- .map(x=>({...x,age:now-(state.wallSeen.get(x.key)||now),dist:100*(x.p/state.price-1)}))
- .sort((a,b)=>Number(b.age>=WALL_MIN_AGE&&b.v>=WALL_MIN_USD)-Number(a.age>=WALL_MIN_AGE&&a.v>=WALL_MIN_USD)||b.v-a.v);
+ .map(x=>({...x,age:now-(state.wallSeen.get(x.key)||now),qualifiedAge:now-(state.wallQualifiedSince.get(x.key)||now),dist:100*(x.p/state.price-1)}))
+ .sort((a,b)=>Number(b.qualifiedAge>=WALL_MIN_AGE&&b.v>=WALL_MIN_USD)-Number(a.qualifiedAge>=WALL_MIN_AGE&&a.v>=WALL_MIN_USD)||b.v-a.v);
 }
 function recordWallDrop(side,p,oldQty,newQty,age,now){
  const prev=p*oldQty,next=p*newQty,lost=prev-next,key=(side==='bid'?'B:':'A:')+p;
@@ -357,13 +357,13 @@ function renderWallInsights(now=Date.now()){
   }
  }
  const list=side=>levels.filter(x=>x.side===side).slice(0,3)
-  .map((x,i)=>'<div class="alertrow">'+(i+1)+'. <strong>'+usd(x.p)+'</strong> · '+usd(x.v)+' · '+wallAge(x.age)+' visible · '+Math.abs(x.dist).toFixed(2)+'% del precio · '+(x.age>=WALL_MIN_AGE&&x.v>=WALL_MIN_USD?'VIGILADO':'nuevo/menor')+'</div>').join('')
+  .map((x,i)=>'<div class="alertrow">'+(i+1)+'. <strong>'+usd(x.p)+'</strong> · '+usd(x.v)+' · '+wallAge(x.age)+' visible · '+Math.abs(x.dist).toFixed(2)+'% del precio · '+(x.qualifiedAge>=WALL_MIN_AGE&&x.v>=WALL_MIN_USD?'VIGILADO':'nuevo/menor')+'</div>').join('')
   ||'<div class="empty">Sin niveles visibles dentro de ±1,2%.</div>';
  bids.innerHTML=list('bid');asks.innerHTML=list('ask');
  $('wallInsightStamp').textContent='Candidatos observados desde que abriste la app · '+time(now);
  // Arm prior levels; do not infer past crossings from levels first seen after the move.
  for(const x of levels){
-  if(x.age<WALL_MIN_AGE||x.v<WALL_MIN_USD)continue;
+  if(x.qualifiedAge<WALL_MIN_AGE||x.v<WALL_MIN_USD)continue;
   const onExpectedSide=x.side==='bid'?state.price>x.p*1.00025:state.price<x.p*.99975;
   let watch=state.wallWatch.get(x.key);
   if(!watch){
@@ -373,7 +373,7 @@ function renderWallInsights(now=Date.now()){
   }else watch.lastSeen=now;
  }
  for(const [key,watch] of state.wallWatch){
-  if(now-watch.lastSeen>180000||now-watch.seenAt>360000)state.wallWatch.delete(key)
+  if(!isTrackedWallPresent(watch,now)||now-watch.seenAt>360000)state.wallWatch.delete(key)
  }
  if(state.wallWatch.size>40){
   const obsolete=[...state.wallWatch.values()].sort((a,b)=>a.lastSeen-b.lastSeen);
@@ -388,6 +388,15 @@ function renderWallInsights(now=Date.now()){
  }).join('')||'<div class="empty">Sin reducciones importantes detectadas en esta sesión.</div>';
  $('wallLossScope').textContent='Bybit, 200 niveles por lado · cambios observados durante esta sesión';
 }
+
+function isTrackedWallPresent(watch,now=Date.now()){
+ if(!state.wsOk||now-state.lastBookAt>8000)return false;
+ const book=watch.side==='bid'?state.bids:state.asks;
+ const qty=Number(book.get(watch.key.slice(2)));
+ const since=state.wallQualifiedSince.get(watch.key);
+ return Number.isFinite(qty)&&qty*watch.level>=WALL_MIN_USD&&Number.isFinite(since)&&now-since>=WALL_MIN_AGE;
+}
+
 function checkBreakouts(now=Date.now()){
  if(!state.wsOk||now-state.lastPriceAt>18000||!state.price)return;
  for(const evt of state.breakouts){
@@ -400,7 +409,8 @@ function checkBreakouts(now=Date.now()){
   else if(elapsed>=90000){evt.status='uncertain';evt.resolved=now;evt.last=state.price}
  }
  for(const watch of state.wallWatch.values()){
-  if(watch.done||now-watch.armedAt<2500||now-watch.lastSeen>150000)continue;
+  if(!isTrackedWallPresent(watch,now)){state.wallWatch.delete(watch.key);continue}
+  if(watch.done||now-watch.armedAt<2500)continue;
   const broken=watch.side==='bid'?state.price<watch.level*.99965:state.price>watch.level*1.00035;
   if(!broken)continue;
   watch.done=true;
@@ -431,18 +441,22 @@ function onBook(d){
  const now=Date.now();
  if(d.type==='snapshot'||a.u===1){
   resetWallTracking();
-  state.bids.clear();state.asks.clear();state.wallSeen.clear();state.heatSamples=[];state.lastHeatAt=0;drawLiquidityHeat();
+  state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.heatSamples=[];state.lastHeatAt=0;drawLiquidityHeat();
  }
  for(const [updates,book,prefix] of [[a.b,state.bids,'B:'],[a.a,state.asks,'A:']]){
   for(const [p,q] of updates){
    if(!Number.isFinite(+p)||+p<=0||!Number.isFinite(+q))continue;
    const key=prefix+p;
-   if(d.type==='delta'&&a.u!==1&&book.has(p)){
-    const oldQty=+book.get(p),age=now-(state.wallSeen.get(key)||now);
-    if(oldQty>+q)recordWallDrop(prefix==='B:'?'bid':'ask',+p,oldQty,+q,age,now)
+   const oldQty=Number(book.get(p))||0,priorNotional=oldQty*(+p),newNotional=(+q)*(+p);
+   if(d.type==='delta'&&a.u!==1&&oldQty>+q){
+    const age=now-(state.wallSeen.get(key)||now);
+    recordWallDrop(prefix==='B:'?'bid':'ask',+p,oldQty,+q,age,now)
    }
-   if(+q<=0){book.delete(p);state.wallSeen.delete(key);continue}
+   if(+q<=0){book.delete(p);state.wallSeen.delete(key);state.wallQualifiedSince.delete(key);continue}
    if(!book.has(p))state.wallSeen.set(key,now);
+   if(newNotional>=WALL_MIN_USD){
+    if(priorNotional<WALL_MIN_USD||!state.wallQualifiedSince.has(key))state.wallQualifiedSince.set(key,now)
+   }else state.wallQualifiedSince.delete(key);
    book.set(p,q)
   }
  }
@@ -489,6 +503,25 @@ function majorLevel(rows){
  if(!rows.length)return null;
  return rows.map(x=>({p:x.p,v:x.p*x.q})).sort((a,b)=>b.v-a.v)[0]
 }
+
+function findWallMatches(bybitRows,binanceRows,side,reference){
+ const tol=Math.max(10,reference*.00035);
+ const top=rows=>rows.map((x,i)=>({p:Number(x.p),v:Number(x.p)*Number(x.q),i}))
+  .filter(x=>Number.isFinite(x.p)&&Number.isFinite(x.v)&&x.p>0&&x.v>=100000);
+ const bs=top(bybitRows),ns=top(binanceRows),pairs=[];
+ for(const a of bs)for(const b of ns){
+  if(Math.abs(a.p-b.p)<=tol)pairs.push({side,p:(a.p+b.p)/2,dist:Math.abs(a.p-b.p),importance:Math.min(a.v,b.v),ai:a.i,bi:b.i})
+ }
+ pairs.sort((a,b)=>b.importance-a.importance||a.dist-b.dist);
+ const seenA=new Set(),seenB=new Set(),chosen=[];
+ for(const x of pairs){
+  if(seenA.has(x.ai)||seenB.has(x.bi))continue;
+  seenA.add(x.ai);seenB.add(x.bi);chosen.push(x);
+  if(chosen.length===2)break
+ }
+ return chosen
+}
+
 function renderExchangeComparison(now=Date.now()){
  const bybitFresh=state.wsOk&&now-state.lastBookAt<8000,binanceFresh=now-state.binanceLastAt<8000;
  const market=(name,bids,asks)=>{
@@ -497,24 +530,25 @@ function renderExchangeComparison(now=Date.now()){
   $(name+'Ask').textContent=a?usd(a.p)+' · '+usd(a.v):'—';
   return {bid:b,ask:a}
  };
- const bybit=bybitFresh?market('cmpBybit',bestComparisonLevels(state.bids,'bid'),bestComparisonLevels(state.asks,'ask')):market('cmpBybit',[],[]);
- const binance=binanceFresh?market('cmpBinance',state.binanceBids,state.binanceAsks):market('cmpBinance',[],[]);
+ const bybitBids=bybitFresh?bestComparisonLevels(state.bids,'bid'):[],bybitAsks=bybitFresh?bestComparisonLevels(state.asks,'ask'):[];
+ const binanceBids=binanceFresh?state.binanceBids:[],binanceAsks=binanceFresh?state.binanceAsks:[];
+ market('cmpBybit',bybitBids,bybitAsks);
+ market('cmpBinance',binanceBids,binanceAsks);
  const src=$('compareStatus'),conf=$('compareCoincidence');
  src.textContent='Bybit '+(bybitFresh?'actualizado':'sin datos recientes')+' · Binance '+(binanceFresh?'actualizado':'sin datos recientes')+' · '+time(now);
  $('binanceStatus').textContent=binanceFresh?'Conectado':'Sin datos recientes';
- if(!bybitFresh||!binanceFresh){
-  conf.textContent='Comparación no disponible: faltan datos recientes de uno de los exchanges.';return
+ if(!bybitFresh||!binanceFresh||Math.abs(state.lastBookAt-state.binanceLastAt)>5000){
+  conf.textContent='Comparación no disponible: fuentes ausentes o sin sincronía temporal suficiente.';return
  }
- const overlaps=[];
- for(const side of ['bid','ask']){
-  const a=bybit[side],b=binance[side];
-  if(a&&b&&a.v>=100000&&b.v>=100000&&Math.abs(a.p-b.p)<=20)
-   overlaps.push((side==='bid'?'Compras':'Ventas')+' visibles cerca de '+usd((a.p+b.p)/2)+' en ambos exchanges');
- }
- conf.textContent=overlaps.length?overlaps.join(' · ')+'. Coincidencia de precios, no una orden compartida.':'No se identificaron muros importantes próximos (±US$20) entre los 20 primeros niveles de cada exchange.'
+ const overlaps=[
+  ...findWallMatches(bybitBids,binanceBids,'bid',state.price),
+  ...findWallMatches(bybitAsks,binanceAsks,'ask',state.price)
+ ];
+ conf.textContent=overlaps.length?overlaps.map(x=>(x.side==='bid'?'Compras':'Ventas')+' cerca de '+usd(x.p)+' (diferencia '+usd(x.dist)+')').join(' · ')+'. Hasta 2 coincidencias por lado; no son una misma orden.':
+  'Sin coincidencias de liquidez ≥US$100.000 por exchange dentro de ±0,035% del precio (mínimo US$10), entre los primeros 20 niveles por lado.'
 }
 
-function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
+function connectBybit(){let ws=new WebSocket('wss://stream.bybit.com/v5/public/linear');state.ws=ws;ws.onopen=()=>{ws.send(JSON.stringify({op:'subscribe',args:['publicTrade.BTCUSDT','orderbook.200.BTCUSDT','allLiquidation.BTCUSDT']}));state.wsOk=true;status('bybitStatus','Conectado',true);status('liqStatus','Conectado',true);$('error').textContent=''};ws.onmessage=e=>{let d;try{d=JSON.parse(e.data)}catch{return}if(!d.topic)return;if(d.topic.startsWith('publicTrade.'))onTrade(d);else if(d.topic.startsWith('orderbook.'))onBook(d);else if(d.topic.startsWith('allLiquidation.'))onLiquidation(d)};ws.onerror=()=>{status('bybitStatus','Error de conexión',false);status('liqStatus','Error de conexión',false)};ws.onclose=()=>{state.wsOk=false;status('bybitStatus','Reconectando',false);status('liqStatus','Reconectando',false);resetWallTracking();state.bids.clear();state.asks.clear();state.wallSeen.clear();state.wallQualifiedSince.clear();state.heatSamples=[];state.lastHeatAt=0;state.lastBookAt=0;renderBook();drawLiquidityHeat();setTimeout(connectBybit,6000)};if(state.pingTimer)clearInterval(state.pingTimer);state.pingTimer=setInterval(()=>{if(ws.readyState===1)ws.send(JSON.stringify({op:'ping'}))},20000)}
 async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
 async function getOi(){// Public sources, no credentials, no simulated fallback.
 const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent='Última lectura '+time(state.lastOiAt)+' · contratos BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}
@@ -550,10 +584,18 @@ async function getOiSeries(){
   if(state.tf!==tf||state.oiSeriesRequest!==request)return;
   state.oiSeries=points;state.oiSeriesAt=Date.now();
   const latest=points[points.length-1],previous=points[points.length-2];
-  const change=(latest.v/previous.v-1)*100;
-  $('oiWindowDelta').textContent=pct(change);
-  $('oiWindowDelta').className='num mono '+(change>=0?'up':'down');
-  $('oiWindowStamp').textContent='Bybit · '+points.length+' registros · último '+time(latest.ts)+' · intervalo '+interval+' (últimos 2 registros)';
+  const expected=Number(tf)*60000,consecutive=Math.abs(latest.ts-previous.ts-expected)<=expected*.10;
+  const recent=latest.ts<=Date.now()+120000&&Date.now()-latest.ts<=Math.max(expected*2,600000);
+  if(consecutive&&recent){
+   const change=(latest.v/previous.v-1)*100;
+   $('oiWindowDelta').textContent=pct(change);
+   $('oiWindowDelta').className='num mono '+(change>=0?'up':'down');
+   $('oiWindowStamp').textContent='Bybit · '+points.length+' registros · último '+time(latest.ts)+' · intervalo '+interval+' (consecutivos)';
+  }else{
+   $('oiWindowDelta').textContent='—';
+   $('oiWindowDelta').className='num mono';
+   $('oiWindowStamp').textContent='Bybit · '+(!consecutive?'historial con huecos':'historial atrasado')+'; sin variación comparable de '+interval;
+  }
   drawOiSeries()
  }catch(e){
   if(state.tf!==tf||state.oiSeriesRequest!==request)return;

@@ -173,7 +173,9 @@ function model(){
  const p=state.price,oi=state.oiHistory,candles=state.fiveCandles;
  if(!p||oi.length<2||!candles.length){state.model=[];draw();$('mapnote').textContent='Sin historial suficiente de Open Interest y velas 5m. No se generan zonas ficticias.';return}
  const candleByStart=new Map(candles.filter(k=>Array.isArray(k)).map(k=>[Number(k[0]),k]));
- const cutoff=Date.now()-Number(state.tf)*60000,buckets=new Map(),levs=[10,25,50],step=p*.002;
+ // The map uses closed 5m OI observations independent of the selected chart timeframe.
+ // A 5m-only filter incorrectly left the map empty whenever the latest OI delta fell.
+ const cutoff=Date.now()-6*3600000,buckets=new Map(),levs=[10,25,50],step=p*.002;
  let used=0,added=0;
  for(let i=1;i<oi.length;i++){
   const prev=oi[i-1],cur=oi[i],inc=cur.v-prev.v;
@@ -191,8 +193,8 @@ function model(){
  }
  state.model=[...buckets.values()].filter(z=>Number.isFinite(z.level)&&z.weight>0);
  $('mapnote').textContent=used
-  ?'Modelo histórico: '+used+' intervalos con aumento neto de OI ('+cash(added)+' BTC), anclados al precio de Bybit. Apalancamiento 10x/25x/50x supuesto; distribución por lado desconocida. No son posiciones observadas ni precios de liquidación reales.'
-  :'Sin aumentos netos de Open Interest detectados durante esta ventana. No se inventan concentraciones.';
+  ?'Modelo histórico de las últimas 6h: '+used+' intervalos con aumento neto de OI ('+cash(added)+' BTC), anclados al precio de Bybit. Apalancamiento 10x/25x/50x supuesto; distribución por lado desconocida. No son posiciones observadas ni precios de liquidación reales.'
+  :'Sin aumentos netos de Open Interest detectados en las últimas 6h. No se inventan concentraciones.';
  draw();
  for(const z of state.model){if(state.distance>0&&Math.abs(z.level/p-1)*100<state.distance)alertUser('Cerca de nivel hipotético '+z.side+' '+usd(z.level),'zone-'+z.side+':'+Math.round(z.level/step),300000,
   {kind:'zone',side:z.side,price:z.level,amount:z.weight,baseline:1,eventId:z.side+':'+Math.round(z.level/step),source:'Modelo hipotético OI; no liquidación real'})}

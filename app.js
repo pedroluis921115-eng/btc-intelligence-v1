@@ -327,7 +327,36 @@ function heatGeometry(samples,currentPrice){
 function heatIntensity(volume,scale){
  if(!(volume>0)||!(scale>0))return 0;
  // Logarithmic transform prevents one very large wall from drowning other levels.
- return Math.min(.95,.13+.82*Math.log1p(volume)/Math.log1p(scale))
+ return Math.min(.98,.18+.80*Math.log1p(volume)/Math.log1p(scale))
+}
+// A large visible wall is an observed resting-order concentration, NOT a
+// probability or a guarantee that the level will hold or attract price.
+function heatWallSummary(now=Date.now()){
+ const fresh=!!(state.wsOk&&state.price>0&&state.lastPriceAt>0&&state.lastBookAt>0&&
+  now-state.lastPriceAt<=20000&&now-state.lastBookAt<=12000);
+ if(!fresh)return {fresh:false,price:null,bid:null,ask:null};
+ // Same 1.3% range as the captured map. Ignore prices outside the currently
+ // visible and comparable band; never claim this is the global order book.
+ const inRange=(p,q)=>p>0&&q>0&&Math.abs(p/state.price-1)<=.013;
+ const pick=(book,side)=>[...book]
+  .map(([rawPrice,rawQty])=>({price:Number(rawPrice),qty:Number(rawQty)}))
+  .filter(x=>Number.isFinite(x.price)&&Number.isFinite(x.qty)&&inRange(x.price,x.qty)&&
+   (side==='bid'?x.price<state.price:x.price>state.price))
+  .map(x=>({...x,usd:x.price*x.qty,side}))
+  .sort((x,y)=>y.usd-x.usd||Math.abs(x.price-state.price)-Math.abs(y.price-state.price))[0]||null;
+ return {fresh:true,price:state.price,bid:pick(state.bids,'bid'),ask:pick(state.asks,'ask')}
+}
+function updateHeatWallSummary(summary){
+ const price=$('heatCurrentPrice'),bid=$('heatStrongBid'),ask=$('heatStrongAsk');
+ if(!price||!bid||!ask)return;
+ price.textContent=summary.fresh?usd(summary.price):'—';
+ bid.textContent=summary.bid?usd(summary.bid.price):'—';
+ ask.textContent=summary.ask?usd(summary.ask.price):'—';
+ $('heatStrongBidHint').textContent=summary.bid?'Orden visible '+usd(summary.bid.usd)+' · '+((summary.price-summary.bid.price)/summary.price*100).toFixed(2)+'% abajo':'Sin muro comprador reciente';
+ $('heatStrongAskHint').textContent=summary.ask?'Orden visible '+usd(summary.ask.usd)+' · '+((summary.ask.price-summary.price)/summary.price*100).toFixed(2)+'% arriba':'Sin muro vendedor reciente';
+ $('heatReadout').textContent=summary.fresh?
+  'Muros = niveles con más importe visible dentro del 1,3% del precio · Bybit L2; pueden retirarse en cualquier momento. NO indican una dirección futura.':
+  'Esperando precio y libro Bybit vigentes · los muros anteriores no se consideran actuales.';
 }
 function drawLiquidityHeat(){
  const canvas=$('liquidityHeat');if(!canvas)return;
@@ -335,6 +364,8 @@ function drawLiquidityHeat(){
  const now=Date.now();
  pruneHeat(now);
  if(document.hidden)return;
+ const wallSummary=heatWallSummary(now);
+ updateHeatWallSummary(wallSummary);
  const width=Math.max(240,Math.round(canvas.parentElement.getBoundingClientRect().width)),
  height=Math.max(205,Math.round(canvas.parentElement.getBoundingClientRect().height)),
  dpr=Math.min(window.devicePixelRatio||1,2),pixelWidth=Math.round(width*dpr),pixelHeight=Math.round(height*dpr);
@@ -349,7 +380,7 @@ function drawLiquidityHeat(){
   $('liquidityHeatStamp').textContent='Historial solo con la página abierta, sin reconstrucción artificial';return
  }
  const geom=heatGeometry(samples,state.price);if(!geom)return;
- const x0=8,y0=15,axisWidth=70,chartWidth=width-axisWidth-x0,chartHeight=height-44;
+ const x0=8,y0=15,axisWidth=78,chartWidth=width-axisWidth-x0,chartHeight=height-44;
  const rowHeight=chartHeight/HEAT_ROWS,windowStart=Math.max(now-HEAT_WINDOW_MS,samples[0].ts-HEAT_SAMPLE_MS);
  const timeSpan=Math.max(HEAT_SAMPLE_MS,now-windowStart);
  const xAt=t=>x0+(t-windowStart)/timeSpan*chartWidth;
@@ -394,10 +425,26 @@ function drawLiquidityHeat(){
   c.beginPath();c.moveTo(x0,y);c.lineTo(width-axisWidth+4,y);c.stroke();
   c.fillStyle='#93abc5';c.fillText('$'+cash(v),width-3,Math.min(height-27,y+3))
  }
+ // Highlight only CURRENT observed wall locations at the right edge.
+ // Never paint the current wall across earlier times (that would invent history).
+ const markerX=x0+chartWidth-4;
+ for(const wall of [wallSummary.bid,wallSummary.ask]){
+  if(!wall)continue;
+  const y=y0+geom.yRatio(wall.price)*chartHeight;
+  if(y<y0||y>=y0+chartHeight)continue;
+  c.fillStyle=wall.side==='bid'?'#40e8ae':'#ff798d';
+  c.fillRect(markerX,y-3,5,6)
+ }
  const yPrice=y0+geom.yRatio(state.price)*chartHeight;
- if(yPrice>=y0&&yPrice<y0+chartHeight){
-  c.strokeStyle='#62d6ed';c.lineWidth=1.2;c.setLineDash([3,3]);
-  c.beginPath();c.moveTo(x0,yPrice);c.lineTo(width-axisWidth+3,yPrice);c.stroke();c.setLineDash([])
+ if(wallSummary.fresh&&yPrice>=y0&&yPrice<y0+chartHeight){
+  // Strong high-contrast price line plus label, not a predicted target.
+  c.strokeStyle='#ffe07b';c.lineWidth=2;c.setLineDash([5,3]);
+  c.beginPath();c.moveTo(x0,yPrice);c.lineTo(width-axisWidth+3,yPrice);c.stroke();c.setLineDash([]);
+  const tagY=Math.max(y0+2,Math.min(y0+chartHeight-19,yPrice-9));
+  c.fillStyle='#3e3217';c.fillRect(width-axisWidth+2,tagY,axisWidth-4,19);
+  c.strokeStyle='#ffe07b';c.lineWidth=.8;c.strokeRect(width-axisWidth+2.5,tagY+.5,axisWidth-5,18);
+  c.fillStyle='#ffe07b';c.font='bold 10px system-ui';c.textAlign='center';
+  c.fillText('$'+cash(state.price),width-axisWidth/2,tagY+13)
  }
  const fmt=ts=>new Date(ts).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'});
  c.font='10px system-ui';c.fillStyle='#9cb0c8';c.textAlign='left';

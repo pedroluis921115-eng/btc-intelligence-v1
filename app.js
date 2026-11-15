@@ -197,38 +197,97 @@ function model(){
  for(const z of state.model){if(state.distance>0&&Math.abs(z.level/p-1)*100<state.distance)alertUser('Cerca de nivel hipotético '+z.side+' '+usd(z.level),'zone-'+z.side+':'+Math.round(z.level/step),300000,
   {kind:'zone',side:z.side,price:z.level,amount:z.weight,baseline:1,eventId:z.side+':'+Math.round(z.level/step),source:'Modelo hipotético OI; no liquidación real'})}
 }
+// These levels are HYPOTHETICAL bucketed OI scenarios; no trader positions
+// or real liquidation prices are observed. Show only shorts ABOVE and longs
+// BELOW the live reference to avoid giving misleading directional labels.
+function modelZoneLadder(price,zones=state.model){
+ if(!(price>0&&Number.isFinite(price)))return {above:[],below:[]};
+ const accept=(z,side)=>z&&z.side===side&&Number.isFinite(z.level)&&z.level>0&&
+   Number.isFinite(z.weight)&&z.weight>0&&
+   (side==='short'?z.level>price:z.level<price)&&Math.abs(z.level/price-1)<=.115;
+ const choose=(side)=>zones.filter(z=>accept(z,side))
+  .sort((a,b)=>Math.abs(a.level-price)-Math.abs(b.level-price)||b.weight-a.weight)
+  .reduce((arr,z)=>{
+   if(arr.length<3&&!arr.some(x=>Math.abs(x.level-z.level)/price<.0035))arr.push(z);
+   return arr
+  },[]);
+ return {above:choose('short'),below:choose('long')}
+}
+function updateModelZoneReadout(ladder,price,ready){
+ const cfg=[
+  ['modelNearestAbove','modelNearestAboveDetail',ladder.above[0],'+','SHORTS estimados arriba'],
+  ['modelNearestBelow','modelNearestBelowDetail',ladder.below[0],'-','LONGS estimados abajo']
+ ];
+ for(const [valueId,detailId,z,sign,name] of cfg){
+  const value=$(valueId),detail=$(detailId);
+  if(!value||!detail)continue;
+  value.textContent=ready&&z?usd(z.level):'—';
+  detail.textContent=!ready?'Esperando BTC y modelo vigentes':
+   z?name+' · '+sign+(Math.abs(z.level/price-1)*100).toFixed(2)+'% · '+usd(Math.abs(z.level-price))+' de distancia':
+   'Sin zona hipotética visible en ±11,5%';
+ }
+ const info=$('modelZoneScope');
+ if(info)info.textContent=ready?
+  'Franjas ordenadas por cercanía, NO a escala vertical. El grosor visual representa peso relativo del modelo, no dinero liquidado ni probabilidad de que BTC llegue al nivel.':
+  'Sin estimación vigente: esperando precio y datos suficientes.'
+}
 function draw(){
  if(foldClosed('heat')){recordSkipped();return}
- const canvas=$('heat'),rect=canvas.parentElement.getBoundingClientRect(),dpr=Math.min(devicePixelRatio||1,2),w=Math.max(250,rect.width),h=Math.max(240,rect.height);
+ const canvas=$('heat'),rect=canvas.parentElement.getBoundingClientRect(),
+  dpr=Math.min(window.devicePixelRatio||1,2),
+  w=Math.max(230,Math.round(rect.width)),h=Math.max(360,Math.round(rect.height));
  canvas.width=Math.round(w*dpr);canvas.height=Math.round(h*dpr);
- const c=canvas.getContext('2d');c.scale(dpr,dpr);c.fillStyle='#0b1425';c.fillRect(0,0,w,h);
+ const c=canvas.getContext('2d');if(!c)return;
+ c.setTransform(dpr,0,0,dpr,0,0);
+ c.fillStyle='#0a1424';c.fillRect(0,0,w,h);
  const p=state.price;
- if(!p){c.font='12px system-ui';c.fillStyle='#a5b8ce';c.fillText('Esperando precio...',12,h/2);return}
- const min=p*.885,max=p*1.115,yFor=v=>h-24-(v-min)/(max-min)*(h-48);
- for(let i=0;i<5;i++){
-  const price=max-(max-min)*i/4,y=yFor(price);
-  c.strokeStyle='#23334a';c.lineWidth=.7;c.beginPath();c.moveTo(6,y);c.lineTo(w-5,y);c.stroke();
-  c.fillStyle='#8698ad';c.font='10px system-ui';c.textAlign='right';c.fillText('$'+cash(price),w-6,Math.max(12,y-5));
+ const ready=!!(p>0&&state.wsOk&&state.lastPriceAt>0&&Date.now()-state.lastPriceAt<=20000);
+ const ladder=ready?modelZoneLadder(p):{above:[],below:[]};
+ updateModelZoneReadout(ladder,p,ready);
+ if(!ready){
+  c.fillStyle='#b3c6da';c.font='13px system-ui';
+  c.fillText('Esperando precio BTC en vivo...',15,h/2);return
  }
- const candidates=state.model.filter(z=>z.level>=min&&z.level<=max).sort((a,b)=>b.weight-a.weight),picked=[];
- for(const z of candidates){
-  const y=yFor(z.level);
-  if(picked.length>=8)break;
-  if(Math.abs(y-yFor(p))<17||picked.some(x=>Math.abs(y-yFor(x.level))<21))continue;
-  picked.push(z)
+ const center=Math.round(h/2),topY=56,bottomY=center+54,spacing=Math.min(52,(center-76)/3);
+ const all=[...ladder.above,...ladder.below],maxWeight=Math.max(1,...all.map(z=>z.weight));
+ const lineWidth=w-24;
+ function drawZone(z,y,above){
+  const ratio=Math.min(1,Math.sqrt(z.weight/maxWeight));
+  const barWidth=Math.max(55,lineWidth*(.28+.70*ratio));
+  const color=above?'#bf9cff':'#ffab75';
+  c.font='bold 12px system-ui';c.textAlign='left';c.fillStyle='#f2f7ff';
+  c.fillText('$'+cash(z.level),12,y-13);
+  const delta=(z.level/p-1)*100;
+  const label=(delta>=0?'+':'')+delta.toFixed(2)+'%';
+  c.textAlign='right';c.fillStyle=color;c.fillText(label,w-12,y-13);
+  const g=c.createLinearGradient(12,y,12+barWidth,y);
+  if(above){g.addColorStop(0,'rgba(119,78,195,.35)');g.addColorStop(1,'rgba(204,165,255,1)')}
+  else{g.addColorStop(0,'rgba(171,82,43,.35)');g.addColorStop(1,'rgba(255,179,113,1)')}
+  c.fillStyle=g;c.fillRect(12,y-2,barWidth,17);
+  // The white notional-axis marker provides a high contrast end without
+  // implying that the bands represent order-book depth or live liquidations.
+  c.fillStyle=color;c.fillRect(12+barWidth-3,y-2,3,17)
  }
- const biggest=Math.max(1,...picked.map(z=>z.weight));
- for(const z of picked){
-  const y=yFor(z.level),length=Math.max(34,(w-110)*(.23+.76*Math.sqrt(z.weight/biggest)));
-  const g=c.createLinearGradient(15,y,15+length,y);
-  g.addColorStop(0,'rgba(250,207,86,.04)');g.addColorStop(1,'rgba(250,207,86,.9)');
-  c.fillStyle=g;c.fillRect(15,y-6,length,12);
-  c.fillStyle=z.side==='long'?'#a5e1c9':'#f0abb7';c.font='bold 10px system-ui';c.textAlign='left';c.fillText(z.side==='long'?'L':'S',6,y-9);
-  c.fillStyle='#f6e9c4';c.font='11px system-ui';c.textAlign='right';c.fillText('$'+cash(z.level),w-6,y+4);
+ c.textAlign='left';c.font='bold 11px system-ui';
+ c.fillStyle='#bf9cff';c.fillText('ARRIBA · SHORTS (hipotéticos)',12,20);
+ c.fillStyle='#ffab75';c.fillText('ABAJO · LONGS (hipotéticos)',12,center+31);
+ for(let i=0;i<ladder.above.length;i++)drawZone(ladder.above[ladder.above.length-1-i],topY+i*spacing,true);
+ for(let i=0;i<ladder.below.length;i++)drawZone(ladder.below[i],bottomY+i*spacing,false);
+ c.fillStyle='#222d3c';c.fillRect(0,center-16,w,34);
+ c.strokeStyle='#ffe07b';c.lineWidth=1.7;c.setLineDash([6,4]);
+ c.beginPath();c.moveTo(0,center);c.lineTo(w,center);c.stroke();c.setLineDash([]);
+ c.font='bold 13px system-ui';c.textAlign='center';
+ const tag='BTC ACTUAL $'+cash(p),tagWidth=Math.min(w-12,184),tagX=(w-tagWidth)/2;
+ c.fillStyle='#473820';c.fillRect(tagX,center-11,tagWidth,24);
+ c.fillStyle='#ffe4a1';c.fillText(tag,w/2,center+6);
+ if(!ladder.above.length){
+  c.font='11px system-ui';c.textAlign='left';c.fillStyle='#adbacb';
+  c.fillText('Sin niveles SHORT estimables arriba',12,topY+5)
  }
- const y=yFor(p);c.strokeStyle='#67d8f2';c.setLineDash([5,4]);c.lineWidth=1.5;c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke();c.setLineDash([]);
- c.fillStyle='#123849';c.fillRect(w-102,y-16,102,18);c.fillStyle='#d3f7ff';c.textAlign='right';c.font='bold 11px system-ui';c.fillText('BTC $'+cash(p),w-6,y-3);c.textAlign='left';
- if(!picked.length){c.fillStyle='#a5b8ce';c.font='12px system-ui';c.fillText('Sin niveles estimables en este intervalo',12,h*.25)}
+ if(!ladder.below.length){
+  c.font='11px system-ui';c.textAlign='left';c.fillStyle='#adbacb';
+  c.fillText('Sin niveles LONG estimables abajo',12,bottomY+5)
+ }
 }
 
 function activeBybitCandle(now=Date.now()){
@@ -327,7 +386,7 @@ function heatGeometry(samples,currentPrice){
 function heatIntensity(volume,scale){
  if(!(volume>0)||!(scale>0))return 0;
  // Logarithmic transform prevents one very large wall from drowning other levels.
- return Math.min(.98,.18+.80*Math.log1p(volume)/Math.log1p(scale))
+ return Math.min(.95,.18+.80*Math.log1p(volume)/Math.log1p(scale))
 }
 // A large visible wall is an observed resting-order concentration, NOT a
 // probability or a guarantee that the level will hold or attract price.
@@ -755,9 +814,18 @@ function initFolds(){
   if(raw&&typeof raw==='object'&&!Array.isArray(raw))stored=raw
  }catch{}
  const panels=[...document.querySelectorAll('details.foldable[data-panel]')];
+ let focusMigration=false;
+ try{
+  const key='btc-intelligence-focus-model-zones-v1';
+  if(localStorage.getItem(key)!=='done'){
+   focusMigration=true;localStorage.setItem(key,'done')
+  }
+ }catch{}
  for(const panel of panels){
   const id=panel.dataset.panel;
-  if(Object.prototype.hasOwnProperty.call(stored,id)){
+  if(focusMigration&&(id==='fold-03'||id==='fold-04')){
+   panel.open=id==='fold-03'
+  }else if(Object.prototype.hasOwnProperty.call(stored,id)){
    panel.open=stored[id]===true
   }
   panel.addEventListener('toggle',()=>{

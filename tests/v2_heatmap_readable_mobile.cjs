@@ -34,22 +34,22 @@ const server=http.createServer((req,res)=>{
    overflow:document.body.scrollWidth>innerWidth+2
   }
  });
- await page.evaluate(()=>drawLiquidityHeat());
+ await page.evaluate(()=>{document.getElementById('liquidityHeat').closest('details').open=true;drawLiquidityHeat()});
  const big=await read();
- assert.equal(big.first,'fold-04','main heat map must be directly below summary');
+ assert.equal(big.first,'fold-03','requested hypothetical model must be first below summary');
  assert.equal(big.open,true,'primary map initially expanded');
  assert.equal(big.valid,true,'Bybit data must be fresh');
  assert.ok(big.price.startsWith('$')&&big.bid.startsWith('$')&&big.ask.startsWith('$'),'live price and walls visible');
  assert.ok(big.bidPrice<big.currentPrice&&big.askPrice>big.currentPrice,'correct bid/ask side');
  assert.ok(big.reason.includes('NO indican una dirección futura'),'no predictive label');
- assert.ok(big.version.includes('v2-liquidity-readable-20261114'),'fresh cache version');
+ assert.ok(big.version.includes('v2-liquidations-clear-20261114'),'fresh cache version');
  assert.ok(big.chartHeight>=300&&big.chartWidth>=250&&!big.overflow,'mobile full width no overflow');
- await page.evaluate(()=>{state.lastBookAt=Date.now()-25000;drawLiquidityHeat()});
+ await page.evaluate(()=>{state.wsOk=false;state.lastBookAt=Date.now()-25000;drawLiquidityHeat()});
  const stale=await read();
  assert.equal(stale.valid,false,'stale book should not show confident walls');
  assert.equal(stale.bid,'—');assert.equal(stale.ask,'—');
  assert.ok(stale.reason.includes('Esperando precio'),'stale label visible');
- await page.evaluate(()=>{state.lastBookAt=Date.now();drawLiquidityHeat()});
+ await page.evaluate(()=>{state.wsOk=true;state.lastBookAt=Date.now();drawLiquidityHeat()});
  await page.setViewport({width:320,height:780,deviceScaleFactor:1});
  await new Promise(r=>setTimeout(r,250));
  await page.evaluate(()=>drawLiquidityHeat());

@@ -20,7 +20,7 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
   const t=id=>document.getElementById(id)?.textContent||'';
   const s=liveStreamStatus();
   return {version:document.title,headerVersion:document.querySelector('header .brand .pill')?.textContent,
-   script:!!document.querySelector('script[src*="v2-liquidity-readable-20261114"]'),
+   script:!!document.querySelector('script[src*="v2-liquidations-clear-20261114"]'),
    price:t('price'),connection:t('connection'),bybit:t('bybitStatus'),liquidations:t('liqStatus'),binance:t('binanceStatus'),
    summary:t('topPrice'),count:state.tradeIds.size,book:state.bids.size,binanceLevels:state.binanceBids.length,
    compare:t('compareCoincidence').slice(0,450),runtime:t('runtimeHealth'),

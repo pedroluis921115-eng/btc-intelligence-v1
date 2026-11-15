@@ -230,6 +230,16 @@ function updateModelZoneReadout(ladder,price,ready){
  if(info)info.textContent=ready?
   'Franjas ordenadas por cercanía, NO a escala vertical. El grosor visual representa peso relativo del modelo, no dinero liquidado ni probabilidad de que BTC llegue al nivel.':
   'Sin estimación vigente: esperando precio y datos suficientes.'
+ const strongest=$('modelStrongest');
+ if(strongest){
+  const peak=zones=>zones.length?zones.reduce((best,z)=>z.weight>best.weight?z:best):null;
+  const above=peak(ladder.above),below=peak(ladder.below);
+  strongest.textContent=!ready?'Mayor peso hipotético: esperando precio BTC vigente.':
+   !above&&!below?'Sin franjas hipotéticas visibles en ±11,5%.':
+   'Mayor peso SUPUESTO entre las franjas visibles: ARRIBA '+(above?usd(above.level):'sin zona')+
+   ' · ABAJO '+(below?usd(below.level):'sin zona')+
+   '. No representa dinero observado ni indica si BTC subirá o bajará.';
+ }
 }
 function draw(){
  if(foldClosed('heat')){recordSkipped();return}

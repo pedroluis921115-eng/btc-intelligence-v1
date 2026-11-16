@@ -64,6 +64,9 @@ async function testViewport(browser,width,height){
   });
   const partial=await page.$eval('#manualPartialResult',el=>el.textContent);
   assert.match(partial,/TOTAL hipotético/);
+  await page.evaluate(()=>{const stop=document.getElementById('manualStop');stop.value='89700';stop.dispatchEvent(new Event('input',{bubbles:true}))});
+  const stale=await page.$eval('#manualRiskResult',el=>el.textContent);
+  assert.match(stale,/Cambiaste un dato del plan/,'old plan invalidated after stop change');
   assert.deepEqual(errors,[],'JS page errors');
   console.log('BROWSER_PASS '+width+'x'+height,JSON.stringify(status));
  }finally{await page.close()}

@@ -18,7 +18,9 @@ Se mantiene la MISMA PWA BTCUSDT gratuita y sin órdenes, claves, pagos, modelos
 - Navegador local con REST controlado: PASS 390x844 y 1280x800; cero errores JS y sin desbordamiento horizontal.
 - Regresiones anteriores: 31/31 replay, 20/20 heatmap, OI 6 horas, resumen 22/22, OI móvil y otras focales incluidas en `scripts/run_manual_v3_tests.py`. 10/10 grupos PASS tras corregir un dato de preparación del test antiguo de alertas y preservar el mapa OI primero.
 - La interpretación económica de zonas / señales / estructura todavía NO tiene prueba prospectiva de rentabilidad. No puede declararse una mejora demostrada de trading.
-- El test real con fuentes externas y la publicación web deben documentarse separadamente cuando se verifiquen.
+- **PUBLICACIÓN PASS 16/11:** commit inicial `8c37845`, push a `main`; verificación HTTP de GitHub Pages `PUBLICATION_PASS v3-manual-20261116 {green:39,red:1}`. El verde V2 anterior mantiene su alcance; el único rojo V2 sigue siendo validación prolongada Android físico.
+- **FUENTE REAL PASS:** Chromium en la URL HTTPS pública recibió las cuatro temporalidades Bybit 4H, 1H, 15M y 5M, 4/4 velas válidas y cero errores JavaScript en la prueba del radar. El ensayo bloqueó deliberadamente otras API para aislar el radar: no certifica que OI/funding/libros estén disponibles en todas las redes.
+- **ALCANCE DEL VERDE V3:** código, UI móvil/escritorio, accesibilidad básica, cálculos aritméticos, fuentes kline públicas en esa sesión, despliegue y cierre de perfil. No certifica rentabilidad, precisión predictiva, costes reales de ejecución ni uso prolongado del móvil.
 
 ## Posterior / NO implementado
 - Modelo de confluencia calibrado frente a velas/OI/flujo y resultados futuros.

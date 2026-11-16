@@ -1,0 +1,28 @@
+
+/* BTC Intelligence V3: panel manual ligero para movil y escritorio. */
+.manual-radar{border-color:#3d6481}
+.manual-head{display:flex;justify-content:space-between;flex-wrap:wrap;align-items:center;gap:8px}
+.manual-status{color:#b5cee8;font-size:11px}
+.manual-tfs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:12px 0}
+.manual-tf{background:#0b182a;border:1px solid #29415c;border-radius:10px;padding:10px;min-width:0}
+.manual-tf-title{font-size:13px;font-weight:800;color:#cbe4f8}
+.manual-tf-value{font-size:16px;font-weight:750;margin:5px 0;overflow-wrap:anywhere}
+.manual-tf-source{font-size:10px;line-height:1.4;color:#9db1c8}
+.manual-summary{padding:12px;border:1px solid #40516c;border-radius:11px;background:#0d1d31}
+.manual-summary-title{font-size:18px;font-weight:750;color:#d4efff}
+.manual-summary p{font-size:12px;line-height:1.55;color:#c5d8eb;margin:6px 0}
+.manual-ref-list{display:grid;grid-template-columns:1fr;gap:8px;margin-top:8px}
+.manual-ref{background:#0d192a;border-radius:8px;border:1px solid #293f58;padding:9px 10px;line-height:1.5}
+.manual-ref strong{display:block;font-size:11px;color:#99b6d6;margin-bottom:4px}
+.manual-ref div{font-size:12px;overflow-wrap:anywhere}
+.manual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.manual-field label{display:block;color:#aec3dc;font-size:11px;margin-bottom:5px;line-height:1.35}
+.manual-field input,.manual-field select{width:100%;border-radius:9px;padding:11px 9px;color:#f2f7ff;background:#0b1828;border:1px solid #405773;font-size:14px;min-height:42px}
+.manual-field select{appearance:auto}
+.manual-buttons{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.manual-buttons button{border:1px solid #4f809a;color:#f0fbff;background:#1d425b;font-size:12px;padding:10px 12px;cursor:pointer;border-radius:8px;font-weight:700}
+.manual-buttons button:focus-visible,.manual-field input:focus-visible{outline:2px solid #68cdea;outline-offset:2px}
+.manual-result{background:#0c1e2d;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.65;color:#d4e6f7;padding:12px;border:1px solid #37516b;border-radius:9px;font-variant-numeric:tabular-nums;font-size:12px}
+.manual-disclaimer{font-size:11px;color:#a5bad1;line-height:1.5;margin-top:10px}
+@media(min-width:700px){.manual-tfs{grid-template-columns:repeat(4,minmax(0,1fr))}.manual-ref-list{grid-template-columns:repeat(2,minmax(0,1fr))}.manual-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(min-width:1050px){.wrap{max-width:1240px}.manual-tf-value{font-size:19px}.manual-radar{margin-top:16px}}

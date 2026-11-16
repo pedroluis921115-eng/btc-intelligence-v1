@@ -1,7 +1,7 @@
 // Verify current public GitHub Pages publication against the pushed commit.
 import assert from 'node:assert/strict';
 const base='https://pedroluis921115-eng.github.io/btc-intelligence-v1/';
-const repo='pedroluis921115-eng/btc-intelligence-v1',version='v2-liquidations-clear-20261114';
+const repo='pedroluis921115-eng/btc-intelligence-v1',version='v3-manual-20261116';
 const expected=process.env.EXPECTED_COMMIT||'',token=process.env.GH_TOKEN||'';
 async function retrieve(url,headers={}){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
@@ -14,10 +14,11 @@ async function retrieve(url,headers={}){
 }
 function assertDeployed(html,js,sw,plan){
  assert.ok(html.includes('app.js?v='+version),'old HTML deployed');
- assert.ok(html.includes('topSnapshot')&&html.includes('alertsPanel')&&html.includes('runtimeHealth'),'UI incomplete');
+ assert.ok(html.includes('topSnapshot')&&html.includes('alertsPanel')&&html.includes('runtimeHealth')&&html.includes('manualRadar'),'UI incomplete');
  for(const fn of ['monitorStreams','clearBybitLive','sourceFreshness','foldClosed','recordSkipped'])
   assert.ok(js.includes(fn),'missing deployed JS '+fn);
  assert.ok(sw.includes('btc-intelligence-'+version),'old service worker cache');
+ assert.ok(html.includes('radar.js?v='+version)&&html.includes('planner.js?v='+version)&&html.includes('manual-assistant.css?v='+version),'manual assistant assets not linked');
  assert.ok(plan.includes('Estado tras Bloque Final'),'plan missing final record');
  const green=(plan.match(/🟢 \d{2} /g)||[]).length,red=(plan.match(/🔴 \d{2} /g)||[]).length;
  assert.equal(green,39);assert.equal(red,1);
@@ -37,9 +38,10 @@ for(let i=1,n=expected?36:1;i<=n;i++){
  try{
   await builtCurrentCommit();
   const q='?verify='+Date.now()+'-'+(expected||version).slice(0,9);
-  const [html,js,sw,plan]=await Promise.all(['','app.js','sw.js','PLAN_V2_ESTADO.md']
+  const [html,js,sw,plan,radar,planner,css]=await Promise.all(['','app.js','sw.js','PLAN_V2_ESTADO.md','radar.js','planner.js','manual-assistant.css']
    .map(f=>retrieve(base+f+q)));
   const result=assertDeployed(html,js,sw,plan);
+  assert.ok(radar.includes('classifyCandles')&&planner.includes('planTrade')&&css.includes('.manual-radar'),'manual assistant assets incomplete');
   console.log('PUBLICATION_PASS',version,result,expected||'local');
   passed=true;break
  }catch(e){

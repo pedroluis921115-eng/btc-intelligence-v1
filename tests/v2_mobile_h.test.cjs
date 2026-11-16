@@ -44,6 +44,7 @@ check(snap.funding.detail.includes('próximo pago')&&snap.funding.detail.include
 run('state.fundingNextAt=Date.now()-500');
 check(!run('topSnapshot().funding.valid'),'Expired next funding rejected');
 run('state.fundingNextAt=Date.now()+100000');
+run('state.sessionStart=Date.now()-600000');
 run('state.alerts=[{text:"Muro importante observado",priority:{rank:3,name:"ALTA",reason:"Tamaño relevante"},lastImportantAt:Date.now()-3000}]');
 snap=run('topSnapshot()');
 check(snap.material?.priority.rank===3,'Previously observed high alert reused');

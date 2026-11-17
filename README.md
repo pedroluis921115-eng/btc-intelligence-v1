@@ -1,16 +1,18 @@
 # BTC Intelligence V6 — análisis visual BTCUSDT
 
-Aplicación personal gratuita, solo lectura. Mismo enlace e icono de escritorio; sin órdenes, claves privadas, modelos locales ni tareas residentes.
+Aplicación gratuita, personal y solo lectura. Mismo enlace e icono del escritorio; sin órdenes, claves privadas, modelos locales ni tareas residentes.
 
-- ANÁLISIS: sesgo 4H/1H/15M/5M, precio, zonas estructurales, presión, funding y hasta 3 hechos en Información importante. Datos insuficientes no generan una recomendación.
-- LIQUIDEZ: mapa grande con velas Bybit reales de 5m (hasta 6h) y bandas hipotéticas de OI calculadas para el momento actual. Colores y zoom ±4/±7/±11%; NO es un mapa histórico de liquidaciones CoinGlass ni observa posiciones privadas. Conserva mapa original desplegable y OI Binance, Bybit y OKX.
-- OPERACIÓN: riesgo, tamaño de posición, parciales y diario de operaciones manuales PAPER/REAL separado, exportación JSON local.
-- Diagnóstico, muros y comparación de libros siguen accesibles en Liquidez → Datos avanzados.
+- **ANÁLISIS:** contexto 4H/1H/15M/5M, zonas, flujo, funding, información importante y ahora **agenda macro económica de 7/14 días**, con horarios en Curitiba y avisos de datos prioritarios de EE. UU.
+- **LIQUIDEZ:** mapa visual con velas 5m y franjas hipotéticas basadas en OI (no es el histórico privado de CoinGlass); OI de Binance, Bybit y OKX. El mapa OI anterior se conserva opcional.
+- **OPERACIÓN:** plan de riesgo, stop, parciales y diario PAPER/REAL local exportable. No se conecta al exchange.
+- Los cuatro paneles de órdenes grandes, comparación de libros, bloqueos y diagnóstico largo fueron retirados de la vista visible, preservando sus elementos de datos y validación internos.
 
 URL: https://pedroluis921115-eng.github.io/btc-intelligence-v1/
 
-Windows: icono BTC Intelligence en el escritorio, Chrome perfil aislado. Al cerrar la ventana no quedan procesos del perfil dedicado en la prueba controlada.
+El calendario económico usa la API gratuita de **XOOMAR** para fechas estadounidenses derivadas de BLS, BEA, Fed y agencias oficiales. **No muestra consenso económico** (la fuente no lo incluye). Consulta la fuente al abrir y cuando la app está visible; desactualización o error de red bloquea eventos no verificables. Avisos solo con aplicación abierta.
 
-Limitaciones: no hay ventaja estadística probada, ni noticias macro automáticas verificadas, ni trading real. Las alertas solo funcionan con la página abierta; diario sin sincronización automática. Una banda de color no indica si BTC se moverá hacia ella.
+Windows: icono BTC Intelligence abre perfil Chrome independiente. La prueba del cierre del perfil dedicado verifica que no queda residente. No hay servicio ni seguimiento cuando la ventana está cerrada.
 
-Evidencia técnica: CIERRE_VISUAL_V6_20261117.md.
+No está demostrado que ningún gráfico, confluencia o evento prediga la dirección o rentabilidad de BTC. Valida fechas definitivas y no operes impulsivamente alrededor de datos muy importantes.
+
+Evidencia: CIERRE_MACRO_V6_20261117.md y CIERRE_VISUAL_V6_20261117.md.

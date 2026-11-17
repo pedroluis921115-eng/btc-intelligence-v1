@@ -1,7 +1,7 @@
 // Verify current public GitHub Pages publication against the pushed commit.
 import assert from 'node:assert/strict';
 const base='https://pedroluis921115-eng.github.io/btc-intelligence-v1/';
-const repo='pedroluis921115-eng/btc-intelligence-v1',version='v6-clean-20261117';
+const repo='pedroluis921115-eng/btc-intelligence-v1',version='v6-macro-20261117';
 const expected=process.env.EXPECTED_COMMIT||'',token=process.env.GH_TOKEN||'';
 async function retrieve(url,headers={}){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
@@ -14,11 +14,11 @@ async function retrieve(url,headers={}){
 }
 function assertDeployed(html,js,sw,plan){
  assert.ok(html.includes('app.js?v='+version),'old HTML deployed');
- assert.ok(html.includes('topSnapshot')&&html.includes('alertsPanel')&&html.includes('runtimeHealth')&&html.includes('manualRadar')&&html.includes('manualConfluencePanel')&&html.includes('manualJournalPanel')&&html.includes('vsRoot')&&html.includes('vsPaneLiquidity'),'UI incomplete');
+ assert.ok(html.includes('topSnapshot')&&html.includes('alertsPanel')&&html.includes('runtimeHealth')&&html.includes('manualRadar')&&html.includes('manualConfluencePanel')&&html.includes('manualJournalPanel')&&html.includes('vsRoot')&&html.includes('vsPaneLiquidity')&&html.includes('vsMacroEvents'),'UI incomplete');
  for(const fn of ['monitorStreams','clearBybitLive','sourceFreshness','foldClosed','recordSkipped'])
   assert.ok(js.includes(fn),'missing deployed JS '+fn);
  assert.ok(sw.includes('btc-intelligence-'+version),'old service worker cache');
- assert.ok(html.includes('radar.js?v='+version)&&html.includes('planner.js?v='+version)&&html.includes('decision-assistant.js?v='+version)&&html.includes('manual-journal.js?v='+version)&&html.includes('visual-shell.js?v='+version)&&html.includes('multi-oi.js?v='+version)&&html.includes('liquidation-visual.js?v='+version)&&html.includes('market-insights.js?v='+version)&&html.includes('manual-assistant.css?v='+version)&&html.includes('visual-shell.css?v='+version)&&html.includes('v6-visual.css?v='+version),'manual assistant assets not linked');
+ assert.ok(html.includes('radar.js?v='+version)&&html.includes('planner.js?v='+version)&&html.includes('decision-assistant.js?v='+version)&&html.includes('manual-journal.js?v='+version)&&html.includes('visual-shell.js?v='+version)&&html.includes('multi-oi.js?v='+version)&&html.includes('liquidation-visual.js?v='+version)&&html.includes('market-insights.js?v='+version)&&html.includes('macro-calendar.js?v='+version)&&html.includes('macro-calendar.css?v='+version)&&html.includes('manual-assistant.css?v='+version)&&html.includes('visual-shell.css?v='+version)&&html.includes('v6-visual.css?v='+version),'manual assistant assets not linked');
  assert.ok(plan.includes('Estado tras Bloque Final'),'plan missing final record');
  const green=(plan.match(/🟢 \d{2} /g)||[]).length,red=(plan.match(/🔴 \d{2} /g)||[]).length;
  assert.equal(green,39);assert.equal(red,1);
@@ -38,10 +38,10 @@ for(let i=1,n=expected?36:1;i<=n;i++){
  try{
   await builtCurrentCommit();
   const q='?verify='+Date.now()+'-'+(expected||version).slice(0,9);
-  const [html,js,sw,plan,radar,planner,decision,journal,visual,venueOi,liqVisual,insights,css,visualCss,v6Css,manifest]=await Promise.all(['','app.js','sw.js','PLAN_V2_ESTADO.md','radar.js','planner.js','decision-assistant.js','manual-journal.js','visual-shell.js','multi-oi.js','liquidation-visual.js','market-insights.js','manual-assistant.css','visual-shell.css','v6-visual.css','manifest.webmanifest']
+  const [html,js,sw,plan,radar,planner,decision,journal,visual,venueOi,liqVisual,insights,macro,macroCss,css,visualCss,v6Css,manifest]=await Promise.all(['','app.js','sw.js','PLAN_V2_ESTADO.md','radar.js','planner.js','decision-assistant.js','manual-journal.js','visual-shell.js','multi-oi.js','liquidation-visual.js','market-insights.js','macro-calendar.js','macro-calendar.css','manual-assistant.css','visual-shell.css','v6-visual.css','manifest.webmanifest']
    .map(f=>retrieve(base+f+q)));
   const result=assertDeployed(html,js,sw,plan);
-  assert.ok(radar.includes('classifyCandles')&&planner.includes('planTrade')&&decision.includes('evaluateContext')&&journal.includes('validateRecord')&&visual.includes('switchView')&&venueOi.includes('parseResponse')&&liqVisual.includes('prepareChart')&&insights.includes('pickImportant')&&css.includes('.manual-radar')&&visualCss.includes('.vs-root')&&v6Css.includes('.vs-map-box')&&manifest.includes('BTC Intelligence V6'),'V6 assets incomplete');
+  assert.ok(radar.includes('classifyCandles')&&planner.includes('planTrade')&&decision.includes('evaluateContext')&&journal.includes('validateRecord')&&visual.includes('switchView')&&venueOi.includes('parseResponse')&&liqVisual.includes('prepareChart')&&insights.includes('pickImportant')&&macro.includes('selectEvents')&&macroCss.includes('vs-macro')&&sw.includes("'./macro-calendar.js'")&&sw.includes("'./macro-calendar.css'")&&css.includes('.manual-radar')&&visualCss.includes('.vs-root')&&v6Css.includes('.vs-map-box')&&manifest.includes('BTC Intelligence V6'),'V6 assets incomplete');
   console.log('PUBLICATION_PASS',version,result,expected||'local');
   passed=true;break
  }catch(e){

@@ -1,0 +1,32 @@
+/* Macro V6 — calendario visual selectivo, sin tareas en background. */
+.vs-root .vs-macro-panel{border:1px solid #39607b;border-radius:14px;background:linear-gradient(155deg,#102139,#111e2d);padding:15px 17px}
+.vs-root .vs-macro-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.vs-root .vs-macro-heading{display:flex;align-items:center;gap:8px;font-weight:900;letter-spacing:.25px;font-size:14px;color:#edf7ff}
+.vs-root .vs-macro-dot{width:10px;height:10px;border-radius:50%;background:#efb85e;box-shadow:0 0 0 4px #56442a;display:inline-block;flex:none}
+.vs-root .vs-macro-tools{display:flex;align-items:center;gap:5px}
+.vs-root .vs-macro-tools button{color:#bad4e5;border:1px solid #3d607c;background:#172f44;padding:8px 11px;border-radius:8px;font-weight:750;font-size:11px;cursor:pointer}
+.vs-root .vs-macro-tools button.active{color:#fbfdff;border-color:#72b7db;background:#2c607f}
+.vs-root .vs-macro-tools button:focus-visible{outline:2px solid #88d9ed;outline-offset:2px}
+.vs-root .vs-macro-status{font-size:10px;font-weight:750;letter-spacing:.25px;color:#8ebbd1;margin:8px 0 12px}
+.vs-root .vs-macro-events{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.vs-root .vs-macro-event{border:1px solid #35536d;border-radius:11px;background:#0b1b2c;padding:12px;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:11px}
+.vs-root .vs-macro-event[data-tier="CRÍTICO"]{border-color:#8f6057;background:#261e29}
+.vs-root .vs-macro-event[data-urgent="true"]{border-color:#f0af57;background:#382722}
+.vs-root .vs-macro-row{display:flex;flex-wrap:wrap;align-items:center;gap:7px}
+.vs-root .vs-macro-tier{color:#f5d0a5;border:1px solid #8d634b;background:#3e302e;font-weight:850;font-size:9px;border-radius:5px;padding:4px 6px;letter-spacing:.25px}
+.vs-root .vs-macro-event[data-tier="IMPORTANTE"] .vs-macro-tier{color:#b2dce9;border-color:#376880;background:#15394a}
+.vs-root .vs-macro-title{font-weight:900;font-size:13px;color:#edf7ff}
+.vs-root .vs-macro-clock{font-size:11px;color:#d4dce7;white-space:nowrap}
+.vs-root .vs-macro-details{justify-content:space-between;align-items:center}
+.vs-root .vs-macro-countdown{font-size:11px;font-weight:850;color:#a8d5dd}
+.vs-root .vs-macro-urgent{font-size:11px;font-weight:900;color:#ffd49d}
+.vs-root .vs-macro-why{font-size:11px;color:#98b4c8;line-height:1.4}
+.vs-root .vs-macro-actual{font-size:11px;font-weight:700;color:#98e9be;line-height:1.4}
+.vs-root .vs-macro-empty{grid-column:1/-1;color:#bbd0df;font-weight:700;font-size:12px;padding:14px 10px;border-radius:9px;background:#0b1b2d}
+.vs-root .vs-macro-next{grid-column:1/-1;font-size:11px;color:#d0e4ef;padding:5px 8px}
+.vs-root .vs-macro-warn{padding:12px;background:#553126;border:1px solid #df9b5f;border-radius:8px;color:#ffe6bf;font-size:12px;font-weight:800;margin:10px 0}
+.vs-root .vs-macro-footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:7px;align-items:center;margin-top:14px}
+.vs-root .vs-macro-footer>a{font-size:10px;color:#8dd9f2;text-decoration:underline}
+.vs-root .vs-macro-footer span{font-size:10px;color:#88a7bc}
+@media(max-width:750px){.vs-root .vs-macro-events{grid-template-columns:1fr}.vs-root .vs-macro-event{padding:11px;gap:7px}}
+@media(max-width:400px){.vs-root .vs-macro-panel{padding:12px}.vs-root .vs-macro-tools button{font-size:10px;padding:7px 8px}.vs-root .vs-macro-clock{font-size:10px}}

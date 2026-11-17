@@ -1,9 +1,16 @@
-# BTC Intelligence V5 — Análisis visual BTCUSDT
+# BTC Intelligence V6 — análisis visual BTCUSDT
 
-Aplicación personal gratuita, solo consulta. **Tres pestañas:** ANÁLISIS (contexto 4H/1H/15M/5M y zonas), LIQUIDEZ (mapa de liquidaciones estimadas y OI Binance/Bybit/OKX) y OPERACIÓN (riesgo, parciales y diario manual).
+Aplicación personal gratuita, solo lectura. Mismo enlace e icono de escritorio; sin órdenes, claves privadas, modelos locales ni tareas residentes.
 
-**Abrir:** icono BTC Intelligence del escritorio de Windows o https://pedroluis921115-eng.github.io/btc-intelligence-v1/
+- ANÁLISIS: sesgo 4H/1H/15M/5M, precio, zonas estructurales, presión, funding y hasta 3 hechos en Información importante. Datos insuficientes no generan una recomendación.
+- LIQUIDEZ: mapa grande con velas Bybit reales de 5m (hasta 6h) y bandas hipotéticas de OI calculadas para el momento actual. Colores y zoom ±4/±7/±11%; NO es un mapa histórico de liquidaciones CoinGlass ni observa posiciones privadas. Conserva mapa original desplegable y OI Binance, Bybit y OKX.
+- OPERACIÓN: riesgo, tamaño de posición, parciales y diario de operaciones manuales PAPER/REAL separado, exportación JSON local.
+- Diagnóstico, muros y comparación de libros siguen accesibles en Liquidez → Datos avanzados.
 
-**Al cerrar:** no deja un servidor local ni debería dejar procesos del perfil dedicado de Chrome. El mercado se observa solamente con la web abierta.
+URL: https://pedroluis921115-eng.github.io/btc-intelligence-v1/
 
-Los informes técnicos extensos quedaron en Liquidez → Datos avanzados; los criterios completos de entrada en Análisis → Ver evidencias. No hay recomendaciones de trading automáticas ni órdenes. Para límites y pruebas, leer CIERRE_VISUAL_V5_20261117.md.
+Windows: icono BTC Intelligence en el escritorio, Chrome perfil aislado. Al cerrar la ventana no quedan procesos del perfil dedicado en la prueba controlada.
+
+Limitaciones: no hay ventaja estadística probada, ni noticias macro automáticas verificadas, ni trading real. Las alertas solo funcionan con la página abierta; diario sin sincronización automática. Una banda de color no indica si BTC se moverá hacia ella.
+
+Evidencia técnica: CIERRE_VISUAL_V6_20261117.md.

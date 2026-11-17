@@ -1510,7 +1510,8 @@ state.lastBybitOpenAt=0;state.lastBinanceOpenAt=0;state.streamGaps=0;
 state.hiddenComputeSkipped=0;state.hiddenDrawSkipped=0;
 function foldClosed(id){
  const el=$(id),fold=el?.closest?.('details.foldable');
- return !!(document.hidden||(fold&&!fold.open))
+ const historical=el?.closest?.('#vsOriginalModel'),pane=el?.closest?.('.vs-pane');
+ return !!(document.hidden||(fold&&!fold.open)||(historical&&!historical.open)||(pane&&pane.hidden))
 }
 function recordSkipped(kind='draw'){
  if(kind==='draw')state.hiddenDrawSkipped++;else state.hiddenComputeSkipped++

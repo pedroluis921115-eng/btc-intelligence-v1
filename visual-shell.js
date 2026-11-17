@@ -38,6 +38,7 @@ function render(){
  const snapshot=typeof topSnapshot==='function'?topSnapshot(n):null;
  set('vsFlow',snapshot?.flow?.valid?snapshot.flow.value:'SIN DATOS');
  set('vsOi',snapshot?.oi?.valid?snapshot.oi.value:'SIN DATOS');
+ set('vsFunding',snapshot?.funding?.valid?snapshot.funding.value:'SIN DATOS');
  set('vsClock',pxOk?'PRECIO VIGENTE':'SIN PRECIO VIGENTE');
 }
 function switchView(next){
@@ -72,10 +73,12 @@ function setup(){
  for(const node of original)if(node.parentElement===main)move(node,advanced);
  // Reducir dibujo de gráficos que el usuario no ha pedido mostrar.
  for(const details of advanced.querySelectorAll('details.foldable'))details.open=false;
+ const previousMap=el('vsOriginalModel');
+ if(previousMap)previousMap.addEventListener('toggle',()=>{if(previousMap.open&&typeof draw==='function')draw()});
  for(const details of trade.querySelectorAll('details.foldable'))details.open=false;
  // No cerramos el mapa principal, ni activamos servicios adicionales.
- const brand=root.document.querySelector('header .brand .pill');if(brand)brand.textContent='V5';
- root.document.title='BTC Intelligence V5';
+ const brand=root.document.querySelector('header .brand .pill');if(brand)brand.textContent='V6';
+ root.document.title='BTC Intelligence V6';
  for(const b of layout.querySelectorAll('[data-vs-view]'))b.addEventListener('click',()=>switchView(b.dataset.vsView));
  for(const b of layout.querySelectorAll('[data-vs-go]'))b.addEventListener('click',()=>switchView(b.dataset.vsGo));
  render();

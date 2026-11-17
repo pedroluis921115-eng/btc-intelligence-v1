@@ -17,7 +17,7 @@ const server=http.createServer((req,res)=>{
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('http://127.0.0.1:'+server.address().port+'/',{waitUntil:'domcontentloaded',timeout:15000});
   // V5: mapa conserva su función, ahora en la pestaña Liquidez.
-  await page.evaluate(()=>document.querySelector('[data-vs-view="liquidity"]').click());
+  await page.evaluate(()=>{document.querySelector('[data-vs-view="liquidity"]').click();document.getElementById("vsOriginalModel").open=true;});
   // Inject only into private local browser test, not an exchange and not deployed.
   const inspect=()=>page.evaluate(()=>{
    const text=id=>document.getElementById(id)?.textContent||'';

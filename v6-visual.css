@@ -1,0 +1,57 @@
+/* V6: informacion importante y mapa visual; sin imágenes externas ni renders residentes. */
+.vs-root .vs-important-panel{border-color:#3a6380;background:linear-gradient(145deg,#0d2334,#112236 65%,#17253c)}
+.vs-root .vs-important-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.vs-root .vs-important-item{min-width:0;min-height:112px;display:flex;flex-direction:column;gap:10px;border-radius:11px;border:1px solid #33516a;background:#0b1a2c;padding:14px 12px;overflow-wrap:anywhere}
+.vs-root .vs-important-label{font-size:11px;font-weight:750;color:#b5d5ee}
+.vs-root .vs-important-value{font-size:clamp(17px,2vw,23px);font-weight:900;color:#d9f7fa;line-height:1.24;font-variant-numeric:tabular-nums}
+.vs-root .vs-important-detail{font-size:11px;color:#94b4cd;line-height:1.45}
+.vs-root .vs-important-item[data-kind="caution"]{border-color:#967348;background:#29231f}
+.vs-root .vs-important-item[data-kind="caution"] .vs-important-value{color:#ffd695}
+.vs-root .vs-important-item[data-kind="zone"]{border-color:#775490}
+.vs-root .vs-important-item[data-kind="zone"] .vs-important-value{color:#d5b9ff}
+.vs-root .vs-important-item[data-kind="flow"] .vs-important-value{color:#97dce9}
+.vs-root .vs-important-item[data-kind="confirm"]{border-color:#39866a}
+.vs-root .vs-important-item[data-kind="confirm"] .vs-important-value{color:#71e9c0}
+.vs-root .vs-activity-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.vs-root .vs-activity-grid strong{font-size:clamp(14px,1.65vw,19px)}
+.vs-root .vs-visual-map{padding:16px;border:1px solid #385773;background:#0a192a}
+.vs-root .vs-map-top{display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:12px}
+.vs-root .vs-map-top>strong{font-size:12px;color:#c2d7e8;font-weight:750}
+.vs-root .vs-zoom-controls{display:flex;gap:5px}
+.vs-root .vs-zoom-controls button{border:1px solid #365875;background:#1b2e44;color:#b3c8df;border-radius:7px;font-size:11px;padding:7px 9px;cursor:pointer;font-weight:800}
+.vs-root .vs-zoom-controls button.active{border-color:#68c7e8;background:#24536b;color:#f2fbff}
+.vs-root .vs-map-box{width:100%;height:440px;border:1px solid #254662;border-radius:12px;overflow:hidden;background:#071222}
+.vs-root .vs-map-box canvas{width:100%;height:100%;display:block}
+.vs-root .vs-map-legend{display:flex;flex-wrap:wrap;align-items:center;gap:14px;padding:14px 2px 8px}
+.vs-root .vs-map-legend>span{display:flex;align-items:center;gap:6px;color:#a6c2d7;font-size:11px}
+.vs-root .vs-legend-dot{width:9px;height:9px;flex-shrink:0;border-radius:3px;display:inline-block}
+.vs-root .vs-legend-dot.upper{background:#c460ed}
+.vs-root .vs-legend-dot.lower{background:#39dda9}
+.vs-root .vs-legend-dot.price{background:#ffe3a2}
+.vs-root .vs-map-zones{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:9px 0}
+.vs-root .vs-map-zones>div{border:1px solid #3e5871;border-radius:9px;background:#0b1d30;padding:13px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.vs-root .vs-map-zones small{font-size:10px;color:#a9c4da}
+.vs-root .vs-map-zones strong{font-size:clamp(18px,2.2vw,25px);font-weight:900;color:#d6c6f2;font-variant-numeric:tabular-nums}
+.vs-root .vs-map-zones>div:nth-child(2) strong{color:#81e7cb}
+.vs-root .vs-map-zones em{font-size:10px;color:#9eb9d2;font-style:normal;line-height:1.4}
+.vs-root .vs-map-note{font-size:11px;color:#9bb3c8;line-height:1.4;margin:8px 0}
+.vs-root #vsOriginalModel .liquidation-model-card{margin:0}
+.vs-root #vsOriginalModel:not([open]) #vsLiquidityMap{display:none}
+@media(max-width:700px){
+ .vs-root .vs-important-list{grid-template-columns:1fr;gap:7px}
+ .vs-root .vs-important-item{min-height:0;padding:10px 12px;gap:5px}
+ .vs-root .vs-important-value{font-size:18px}
+ .vs-root .vs-important-detail{font-size:10px}
+ .vs-root .vs-map-box{height:420px}
+ .vs-root .vs-map-top{gap:5px}
+ .vs-root .vs-activity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .vs-root .vs-activity-grid>div:last-child{grid-column:1/-1}
+}
+@media(max-width:360px){
+ .vs-root .vs-map-box{height:380px}
+ .vs-root .vs-map-zones{gap:5px}
+ .vs-root .vs-map-zones>div{padding:9px}
+ .vs-root .vs-map-zones strong{font-size:17px}
+ .vs-root .vs-map-legend{gap:8px}
+ .vs-root .vs-map-legend>span{font-size:10px}
+}

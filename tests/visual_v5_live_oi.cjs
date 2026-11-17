@@ -16,7 +16,7 @@ const server=http.createServer((req,res)=>{
   const page=await browser.newPage();
   const target=process.argv.includes('--public')?'https://pedroluis921115-eng.github.io/btc-intelligence-v1/':'http://127.0.0.1:'+server.address().port+'/';
   await page.goto(target,{waitUntil:'domcontentloaded',timeout:20000});
-  if((await page.title())!=='BTC Intelligence V5')throw Error('Versión pública anterior');
+  if((await page.title())!=='BTC Intelligence V6')throw Error('Versión pública anterior');
   await page.click('[data-vs-view="liquidity"]');
   try{await page.waitForFunction(()=>document.getElementById('vsOiTotal')?.textContent.includes('BTC'),{timeout:14000})}catch{}
   const result=await page.evaluate(()=>({

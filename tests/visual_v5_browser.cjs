@@ -45,7 +45,7 @@ async function viewport(browser,width,height){
   }));
   assert.equal(initial.selected,'analysis');assert.ok(initial.text.length);
   assert.equal(initial.panes.filter(x=>!x.hidden).length,1);
-  assert.equal(initial.title,'BTC Intelligence V5');
+  assert.equal(initial.title,'BTC Intelligence V6');
   assert.ok(initial.width<=initial.window+2,'no overflow in analysis '+JSON.stringify(initial));
   await page.click('[data-vs-view="liquidity"]');
   await page.waitForFunction(()=>document.getElementById('vsOiTotal')?.textContent.includes('BTC'),{timeout:8000});
@@ -54,12 +54,14 @@ async function viewport(browser,width,height){
    total:document.getElementById('vsOiTotal').textContent,
    hint:document.getElementById('vsOiHint').textContent,
    hidden:document.getElementById('vsPaneAnalysis').hidden,
-   mapVisible:document.getElementById('heat').getBoundingClientRect().height,
+   mapVisible:document.getElementById('vsLiqCanvas').getBoundingClientRect().height,
    width:document.documentElement.scrollWidth,window:innerWidth
   }));
   assert.ok(oi.labels.every(x=>x.includes('BTC')),'all 3 OI '+JSON.stringify(oi));
   assert.ok(oi.total.includes('192,153')||oi.total.includes('192,152'),'sum '+JSON.stringify(oi));
-  assert.equal(oi.hidden,true);assert.ok(oi.mapVisible>=400,'liquidations map shown');
+  assert.equal(oi.hidden,true);assert.ok(oi.mapVisible>=350,'visual estimated map shown');
+  await page.evaluate(()=>{document.getElementById('vsOriginalModel').open=true});
+  await page.waitForFunction(()=>document.getElementById('heat').getBoundingClientRect().height>=400,{timeout:3500});
   assert.ok(oi.width<=oi.window+2,'liquidity overflow');
   await page.click('[data-vs-view="trade"]');
   const trade=await page.evaluate(()=>({

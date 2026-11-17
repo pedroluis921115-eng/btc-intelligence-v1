@@ -73,4 +73,9 @@ test('Unconfirmed past event does not falsely become published',()=>{
  const row=classifyEvent({source:'census',eventName:'Retail Sales (Advance)',importance:'high',scheduledAt:'2026-11-17T13:30:00Z'});
  assert.match(eventState(row,now).label,/SIN VALOR CONFIRMADO/);
 });
+test('Full macro API must not pre-filter medium relevant releases',()=>{
+ const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'..','macro-calendar.js'),'utf8');
+ assert.ok(source.includes("const API='https://xoomar.com/api/markets/calendar';"));
+ assert.ok(!source.includes('calendar?importance=high'));
+});
 console.log('EVENTS_CRITICAL_REGRESSIONS_PASS',count);

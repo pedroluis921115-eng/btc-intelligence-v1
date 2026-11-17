@@ -2,6 +2,8 @@
 (function(root){
 'use strict';
 const FEED='./data/corporate-calendar.json';
+const LIVE_EARNINGS='https://xoomar.com/api/markets/earnings';
+const EXTERNAL_MAX_AGE=72*3600000;
 const MAX_AGE=40*3600000,DAY=86400000;
 const el=id=>root?.document?.getElementById(id);
 const dateFmt=new Intl.DateTimeFormat('es-ES',{timeZone:'America/Sao_Paulo',day:'2-digit',month:'short',weekday:'short',hour:'2-digit',minute:'2-digit',hour12:false});
@@ -18,13 +20,13 @@ function offsetDay(iso,offset){
 function cleanEvent(raw){
  if(!raw||!['NVDA','MSFT','AAPL','AMZN','GOOGL','GOOG','META','TSLA','AMD','AVGO','ORCL','NFLX','MU','PLTR'].includes(raw.symbol))return null;
  if(typeof raw.name!=='string'||raw.name.length>50||!/^\d{4}-\d{2}-\d{2}$/.test(raw.date))return null;
- const official=raw.officialConfirmed===true;
- const scheduled=official?Date.parse(raw.exactTime||''):null;
+ const official=raw.officialConfirmed===true||raw.official===true;
+ const scheduled=official?(Number.isFinite(raw.scheduled)?raw.scheduled:Date.parse(raw.exactTime||'')):null;
  if(official&&(!Number.isFinite(scheduled)||!String(raw.sourceUrl).startsWith('https://investor.')))return null;
  const link=String(raw.sourceUrl||'');
- if(!link.startsWith('https://www.nasdaq.com/')&&!link.startsWith('https://investor.'))return null;
+ if(!link.startsWith('https://www.nasdaq.com/')&&!link.startsWith('https://investor.')&&!/^https:\/\/xoomar\.com\/markets\/stocks\/[a-z0-9-]+$/i.test(link))return null;
  return {symbol:raw.symbol,name:raw.name,date:raw.date,sourceUrl:link,
-  official,scheduled,followupTime:official?Date.parse(raw.followupTime||''):null,
+  official,scheduled,followupTime:official?(Number.isFinite(raw.followupTime)?raw.followupTime:Date.parse(raw.followupTime||'')):null,
   session:['before','after','during','unknown'].includes(raw.session)?raw.session:'unknown',
   tier:raw.tier==='CRITICO'?'CRÍTICO':'IMPORTANTE',
   id:String(raw.id||'').slice(0,110)};
@@ -58,7 +60,50 @@ function companyStatus(e,now=Date.now()){
  if(dt<DAY)return {label:'EN '+Math.ceil(dt/3600000)+' H',urgent:false};
  return {label:'EN '+Math.ceil(dt/DAY)+' DÍAS',urgent:false};
 }
-let latest=null,alive=true,loading=false,lastAttempt=0,horizon=7,controller=null;
+
+// Fuente gratuita viva: estimaciones sin hora. Nunca prevalecen sobre un comunicado de la empresa.
+const WATCHLIST=new Map([
+ ['NVDA','NVIDIA'],['MSFT','Microsoft'],['AAPL','Apple'],['AMZN','Amazon'],
+ ['GOOGL','Alphabet'],['GOOG','Alphabet'],['META','Meta'],['TSLA','Tesla'],
+ ['AMD','AMD'],['AVGO','Broadcom'],['ORCL','Oracle'],['NFLX','Netflix'],
+ ['MU','Micron'],['PLTR','Palantir']
+]);
+function normalizeEarningsFeed(payload,now=Date.now()){
+ const updated=Date.parse(payload?.updatedAt||'');
+ if(!Array.isArray(payload?.data)||!Number.isFinite(updated)||updated>now+300000||now-updated>EXTERNAL_MAX_AGE)
+  return {ok:false,reason:'Fuente empresarial externa no vigente'};
+ const events=[];
+ for(const raw of payload.data){
+  const symbol=String(raw?.ticker||'').toUpperCase();
+  if(!WATCHLIST.has(symbol)||!/^\d{4}-\d{2}-\d{2}$/.test(raw.date||'')||raw.status!=='estimated')continue;
+  const date=raw.date;
+  const link='https://xoomar.com/markets/stocks/'+symbol.toLowerCase();
+  const row=cleanEvent({id:'estimated-'+symbol+'-'+date,symbol,name:WATCHLIST.get(symbol),
+   date,officialConfirmed:false,sourceUrl:link,session:'unknown',tier:
+   ['NVDA','MSFT','AAPL','AMZN','GOOGL','META'].includes(symbol)?'CRITICO':'IMPORTANTE'});
+  if(row)events.push(row);
+ }
+ return {ok:true,events,updated};
+}
+function mergeCompanyFeeds(official,external,now=Date.now()){
+ const officialGood=official&&selectCompanyEvents(official,now,14).ok;
+ const ext=normalizeEarningsFeed(external,now);
+ if(!officialGood&&!ext.ok)return {ok:false,reason:'Sin fuente empresarial vigente'};
+ const events=[],bySymbol=new Map();
+ if(ext.ok)for(const e of ext.events)bySymbol.set(e.symbol,e);
+ if(officialGood)for(const item of official.events){
+  const clean=cleanEvent(item);if(clean?.official){
+   // Prioridad estricta: comunicado oficial > estimado de proveedor externo (aunque otra fecha).
+   bySymbol.delete(clean.symbol);
+   if(clean.date>=localDay(now))bySymbol.set(clean.symbol,clean);
+  }
+ }
+ events.push(...bySymbol.values());
+ return {ok:true,feed:{generatedAt:new Date(now).toISOString(),events},
+  source:officialGood&&ext.ok?'Oficial + XOOMAR':officialGood?'Oficial (cobertura limitada)':'XOOMAR (estimaciones)'};
+}
+
+let latest=null,alive=true,loading=false,lastAttempt=0,horizon=7,controller=null,sourceLabel='';
 function render(){
  const target=el('vsCorporateEvents'),status=el('vsCorporateStatus');
  if(!alive||!target||!status)return;
@@ -74,7 +119,7 @@ function render(){
   status.textContent='EMPRESAS · SIN EVENTOS RELEVANTES DETECTADOS EN LA LISTA VIGILADA';
   return;
  }
- status.textContent='EMPRESAS TECNOLÓGICAS · '+selected.events.length+' EVENTO(S) · HORAS OFICIALES CUANDO DISPONIBLES';
+ status.textContent='EMPRESAS · '+selected.events.length+' EVENTO(S) · '+sourceLabel+' · horas solo si están confirmadas';
  for(const e of selected.events){
   const card=root.document.createElement('article');
   card.className='vs-macro-event vs-corporate-card';card.dataset.tier=e.tier;
@@ -89,7 +134,7 @@ function render(){
   const countdown=root.document.createElement('strong');countdown.className=state.urgent?'vs-macro-urgent':'vs-macro-countdown';countdown.textContent=state.label;detail.appendChild(countdown);
   const why=root.document.createElement('span');why.className='vs-macro-why';
   why.textContent=e.official?'Compañía: horario oficial confirmado. Puede aumentar la volatilidad tecnológica.':
-   'Nasdaq: fecha orientativa. Confirma el horario en la web de la compañía.';
+   'Fecha estimada, NO anuncio oficial. Confirma siempre en la web de la compañía.';
   detail.appendChild(why);card.appendChild(detail);
   if(e.official&&Number.isFinite(e.followupTime)){
    const conf=root.document.createElement('div');conf.className='vs-corporate-call';
@@ -97,7 +142,7 @@ function render(){
    card.appendChild(conf);
   }
   const link=root.document.createElement('a');link.className='vs-corporate-source';link.href=e.sourceUrl;
-  link.target='_blank';link.rel='noopener noreferrer';link.textContent=e.official?'FUENTE OFICIAL':'CALENDARIO NASDAQ';card.appendChild(link);
+  link.target='_blank';link.rel='noopener noreferrer';link.textContent=e.official?'FUENTE OFICIAL':e.sourceUrl.includes('xoomar.com')?'FECHA ESTIMADA · XOOMAR':'CALENDARIO NASDAQ';card.appendChild(link);
   target.appendChild(card);
  }
  const imminent=selected.events.some(x=>x.official&&(x.scheduled-now)>-600000&&(x.scheduled-now)<=1800000);
@@ -106,15 +151,20 @@ function render(){
 async function refresh(force=false){
  if(!alive||loading||root.document.hidden||Date.now()-lastAttempt<(force?60000:30*60000))return;
  loading=true;lastAttempt=Date.now();
- controller=new AbortController();const timer=root.setTimeout(()=>controller?.abort(),9500);
+ controller=new AbortController();const timer=root.setTimeout(()=>controller?.abort(),10000);
  try{
-  const response=await fetch(FEED,{cache:'no-store',signal:controller.signal});
-  if(!response.ok)throw Error('HTTP '+response.status);
-  const data=await response.json();
-  const verified=selectCompanyEvents(data);
-  if(!verified.ok)throw Error(verified.reason);
-  latest=data;
- }catch(err){if(!latest)latest={generatedAt:null,events:[]}}
+  const get=async url=>{
+   const response=await fetch(url,{cache:'no-store',signal:controller.signal});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   return response.json();
+  };
+  const results=await Promise.allSettled([get(FEED),get(LIVE_EARNINGS)]);
+  const official=results[0].status==='fulfilled'?results[0].value:null;
+  const external=results[1].status==='fulfilled'?results[1].value:null;
+  const merged=mergeCompanyFeeds(official,external,Date.now());
+  if(!merged.ok)throw Error(merged.reason);
+  latest=merged.feed;sourceLabel=merged.source;
+ }catch(err){if(!latest)sourceLabel='FUENTES TEMPORALMENTE INACCESIBLES'}
  finally{root.clearTimeout(timer);controller=null;loading=false;if(alive)render()}
 }
 function init(){
@@ -129,7 +179,7 @@ function init(){
  root.addEventListener('pagehide',()=>{alive=false;controller?.abort()},{once:true});
  render();refresh();
 }
-if(typeof module==='object'&&module.exports)module.exports={cleanEvent,selectCompanyEvents,companyStatus,localDay};
+if(typeof module==='object'&&module.exports)module.exports={cleanEvent,selectCompanyEvents,companyStatus,localDay,normalizeEarningsFeed,mergeCompanyFeeds};
 if(root?.document){
  root.BTCCorporate={render,refresh};
  if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',init,{once:true});else init();

@@ -1,7 +1,8 @@
 /* BTC Intelligence V6 Macro: releases importantes USA, solo informativo. Sin órdenes ni background. */
 (function(root){
 'use strict';
-const API='https://xoomar.com/api/markets/calendar?importance=high';
+// Fetch FULL provider feed, then apply our restrictive, event-specific BTC filters.
+const API='https://xoomar.com/api/markets/calendar';
 const SOURCE='https://xoomar.com/markets/api/calendar';
 const MAX_AGE=72*3600000;
 const HOUR=3600000,DAY=24*HOUR;

@@ -1,7 +1,7 @@
 // Verify current public GitHub Pages publication against the pushed commit.
 import assert from 'node:assert/strict';
 const base='https://pedroluis921115-eng.github.io/btc-intelligence-v1/';
-const repo='pedroluis921115-eng/btc-intelligence-v1',version='v6-earnings-20261117';
+const repo='pedroluis921115-eng/btc-intelligence-v1',version='v6-earnings3-20261117';
 const expected=process.env.EXPECTED_COMMIT||'',token=process.env.GH_TOKEN||'';
 async function retrieve(url,headers={}){
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);

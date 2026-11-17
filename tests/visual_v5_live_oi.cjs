@@ -14,7 +14,9 @@ const server=http.createServer((req,res)=>{
   await new Promise(ok=>server.listen(0,'127.0.0.1',ok));
   browser=await puppeteer.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
   const page=await browser.newPage();
-  await page.goto('http://127.0.0.1:'+server.address().port+'/',{waitUntil:'domcontentloaded',timeout:20000});
+  const target=process.argv.includes('--public')?'https://pedroluis921115-eng.github.io/btc-intelligence-v1/':'http://127.0.0.1:'+server.address().port+'/';
+  await page.goto(target,{waitUntil:'domcontentloaded',timeout:20000});
+  if((await page.title())!=='BTC Intelligence V5')throw Error('Versión pública anterior');
   await page.click('[data-vs-view="liquidity"]');
   try{await page.waitForFunction(()=>document.getElementById('vsOiTotal')?.textContent.includes('BTC'),{timeout:14000})}catch{}
   const result=await page.evaluate(()=>({

@@ -1,0 +1,91 @@
+/* V5: visual first, text only when requested. Designed for 8 GB Windows and mobile. */
+.vs-root{display:block;width:100%;margin:12px 0 26px;max-width:100%;color:#e7f2ff}
+.vs-root [hidden]{display:none!important}
+.vs-root .vs-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;position:sticky;top:90px;z-index:12;background:#081221;padding:9px 3px 12px;border-bottom:1px solid #1c334d;margin-bottom:16px}
+.vs-root .vs-tab{font:inherit;font-weight:800;letter-spacing:.45px;font-size:12px;border:1px solid #2a4764;border-radius:10px;background:#14243a;color:#9ebbd3;padding:14px 5px;cursor:pointer;min-width:0}
+.vs-root .vs-tab.active{background:#20537a;border-color:#58acd5;color:#f4fcff;box-shadow:0 0 0 1px #23698f}
+.vs-root .vs-tab:focus-visible,.vs-root button:focus-visible,.vs-root summary:focus-visible{outline:2px solid #64d5ed;outline-offset:2px}
+.vs-root .vs-pane{display:grid;gap:12px;min-width:0}
+.vs-root .vs-card,.vs-root .vs-hero{border:1px solid #28435f;border-radius:15px;background:linear-gradient(160deg,#111f32,#0d1829);padding:19px;min-width:0}
+.vs-root .vs-hero{background:linear-gradient(115deg,#132536,#102031 65%,#15273a);border-color:#375a70;padding:22px 23px;position:relative;overflow:hidden}
+.vs-root .vs-hero:before{content:'';position:absolute;top:0;bottom:0;left:0;width:5px;background:#678da5}
+.vs-root .vs-hero[data-tone="bull"]{border-color:#348969;background:linear-gradient(120deg,#112c2c,#0f1e2d 70%)}
+.vs-root .vs-hero[data-tone="bull"]:before{background:#3ec397}
+.vs-root .vs-hero[data-tone="bear"]{border-color:#986076;background:linear-gradient(120deg,#2b1e30,#0f1d2b 70%)}
+.vs-root .vs-hero[data-tone="bear"]:before{background:#ee7692}
+.vs-root .vs-hero-head{display:flex;justify-content:space-between;gap:10px;font-size:10px;letter-spacing:1px;font-weight:750;color:#9dbed1}
+.vs-root .vs-decision{font-weight:900;font-size:clamp(28px,4.2vw,53px);line-height:1.12;letter-spacing:-.6px;margin:16px 0 8px}
+.vs-root [data-tone="bull"] .vs-decision{color:#6fe6b0}
+.vs-root [data-tone="bear"] .vs-decision{color:#ff98a9}
+.vs-root .vs-why{font-size:13px;line-height:1.45;color:#d8e9fb;max-width:760px;margin:0}
+.vs-root .vs-disclaimer{font-size:10px;color:#91adc5;line-height:1.4;margin-top:13px}
+.vs-root .vs-section-title{font-size:13px;font-weight:850;color:#edf7ff;display:flex;justify-content:space-between;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:15px}
+.vs-root .vs-section-title span{color:#8ca8bf;font-size:10px;font-weight:600;letter-spacing:.35px}
+.vs-root .vs-frame-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.vs-root .vs-frame{background:#0b1829;border-radius:10px;border:1px solid #273e57;display:grid;gap:6px;padding:16px 9px;min-width:0;text-align:center}
+.vs-root .vs-frame b{font-size:13px;color:#a7bfd5}
+.vs-root .vs-frame strong{font-size:clamp(11px,1.3vw,16px);font-weight:850;overflow-wrap:anywhere;color:#c8d7e8}
+.vs-root .vs-frame strong[data-tone="bull"]{color:#50dbab}
+.vs-root .vs-frame strong[data-tone="bear"]{color:#ff849c}
+.vs-root .vs-zone-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.vs-root .vs-zone{padding:18px 15px;border-radius:11px;display:flex;flex-direction:column;gap:10px}
+.vs-root .vs-zone.upper{border:1px solid #69548e;background:#241e35}
+.vs-root .vs-zone.lower{border:1px solid #936c4e;background:#2a211b}
+.vs-root .vs-zone span{font-weight:800;color:#bcabef;font-size:11px}
+.vs-root .vs-zone.lower span{color:#f4b486}
+.vs-root .vs-zone strong{font-size:clamp(19px,2.4vw,30px);font-variant-numeric:tabular-nums;color:#dfc5ff}
+.vs-root .vs-zone.lower strong{color:#ffc79c}
+.vs-root .vs-zone small{font-size:12px;color:#c2c4d8}
+.vs-root .vs-activity-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.vs-root .vs-activity-grid>div{display:grid;gap:8px;padding:16px;background:#0b1829;border:1px solid #29415a;border-radius:11px;min-width:0}
+.vs-root .vs-activity-grid small{font-size:10px;color:#91adc8}
+.vs-root .vs-activity-grid strong{font-size:18px;font-weight:830;overflow-wrap:anywhere}
+.vs-root .vs-short-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.vs-root .vs-short-actions button{padding:15px 10px;cursor:pointer;border-radius:11px;background:#204764;color:#e5faff;border:1px solid #4a8eae;font-size:12px;font-weight:800}
+.vs-root .vs-short-actions button:last-child{background:#173348;border-color:#355b73}
+.vs-root .vs-advanced-details{margin:6px 0 8px;min-width:0;border-radius:12px;background:#0d1828;border:1px solid #27425e;padding:3px 12px}
+.vs-root .vs-advanced-details>summary{padding:17px 5px;cursor:pointer;color:#a6c2dc;font-size:12px;font-weight:800;letter-spacing:.15px}
+.vs-root .vs-advanced-details>div{padding:8px 0 16px;display:grid;gap:12px;min-width:0}
+.vs-root #vsPaneAnalysis>.row{padding:4px 8px 5px;margin:0 0 2px!important;gap:10px}
+.vs-root #vsPaneAnalysis>.row .price{font-size:clamp(29px,4vw,46px)}
+.vs-root #vsAnalysisEvidence>.card{margin-bottom:0}
+.vs-root .vs-oi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.vs-root .vs-oi-venue{padding:16px 11px;border:1px solid #2a4a5d;border-radius:11px;background:#0c1e2e;min-width:0;display:flex;flex-direction:column;gap:8px}
+.vs-root .vs-oi-venue span{font-size:11px;font-weight:850;color:#a5c9df}
+.vs-root .vs-oi-venue strong{font-weight:850;color:#edfbff;font-size:clamp(16px,2.2vw,25px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.vs-root .vs-oi-venue .vs-unavailable{color:#8b9daf}
+.vs-root .vs-oi-venue small{font-size:10px;color:#7fdbc7}
+.vs-root .vs-oi-venue em{font-size:10px;color:#88a1b9;font-style:normal}
+.vs-root .vs-oi-total{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;border-top:1px solid #27435a;padding-top:14px}
+.vs-root .vs-oi-total span{font-size:11px;font-weight:850;color:#a7c3d8}
+.vs-root .vs-oi-total strong{font-size:clamp(20px,3vw,32px);color:#e3f7ff}
+.vs-root .vs-internal-heading{font-size:13px;font-weight:850;color:#c8e4f5;margin:5px 0 -5px}
+.vs-root #vsLiquidityMap>.card{margin:0}
+.vs-root .vs-trade-head h2{font-size:18px;margin:4px 0}
+.vs-root .vs-trade-head p{color:#a9bdd0;font-size:12px;margin:5px 0}
+.vs-root #vsTradeContent{display:grid;gap:12px}
+.vs-root #vsTradeContent>.card{margin:0}
+.vs-root #vsAdvancedMarket .main-grid{margin:0!important}
+.vs-root #vsAdvancedMarket>.card,.vs-root #vsAdvancedMarket>.main-grid{margin-bottom:0!important}
+@media(min-width:700px){.vs-root .vs-nav{top:100px}.vs-root .vs-pane{gap:15px}}
+@media(max-width:610px){
+ .vs-root .vs-nav{top:72px;gap:5px;padding:5px 0 9px}
+ .vs-root .vs-tab{font-size:11px;padding:12px 3px}
+ .vs-root .vs-card,.vs-root .vs-hero{padding:13px}
+ .vs-root .vs-hero{padding:17px 14px 18px}
+ .vs-root .vs-frame-grid{gap:5px}
+ .vs-root .vs-frame{padding:11px 3px}
+ .vs-root .vs-frame strong{font-size:10px;line-height:1.3}
+ .vs-root .vs-zone{padding:13px 10px;gap:7px}
+ .vs-root .vs-zone strong{font-size:19px}
+ .vs-root .vs-zone small{font-size:10px}
+ .vs-root .vs-activity-grid strong{font-size:15px}
+ .vs-root .vs-oi-grid{grid-template-columns:1fr}
+ .vs-root .vs-oi-venue{display:grid;grid-template-columns:1fr auto;gap:5px 10px;align-items:center}
+ .vs-root .vs-oi-venue span{grid-column:1}
+ .vs-root .vs-oi-venue strong{grid-column:2;grid-row:1/3;text-align:right}
+ .vs-root .vs-oi-venue small{grid-column:1}
+ .vs-root .vs-oi-venue em{grid-column:1/-1}
+ .vs-root .vs-short-actions{gap:6px}
+ .vs-root .vs-short-actions button{padding:13px 6px;font-size:11px}
+}

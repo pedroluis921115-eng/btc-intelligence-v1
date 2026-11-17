@@ -1,11 +1,9 @@
-# BTC Intelligence — PWA BTCUSDT (asistente manual V4)
-Web gratuita de solo lectura. Sin credenciales bursátiles ni órdenes de trading.
+# BTC Intelligence V5 — Análisis visual BTCUSDT
 
-Publicación: https://pedroluis921115-eng.github.io/btc-intelligence-v1/
+Aplicación personal gratuita, solo consulta. **Tres pestañas:** ANÁLISIS (contexto 4H/1H/15M/5M y zonas), LIQUIDEZ (mapa de liquidaciones estimadas y OI Binance/Bybit/OKX) y OPERACIÓN (riesgo, parciales y diario manual).
 
-Móvil: abrir HTTPS en Chrome y añadir a pantalla de inicio.
-Windows: icono "BTC Intelligence" en el escritorio real; perfil independiente de Chrome, sin servidor local ni programa residente.
+**Abrir:** icono BTC Intelligence del escritorio de Windows o https://pedroluis921115-eng.github.io/btc-intelligence-v1/
 
-Incluye radar 4H/1H/15M/5M, confluencias descriptivas y alertas solo con ventana abierta, mapa de zonas estimadas OI, libro visible L2, flujo y volumen, planificador de riesgo, parciales y diario local exportable en JSON.
+**Al cerrar:** no deja un servidor local ni debería dejar procesos del perfil dedicado de Chrome. El mercado se observa solamente con la web abierta.
 
-Las confluencias no son señales científicamente validadas. Las alertas se detienen al cerrar. El diario no se sincroniza entre móvil y laptop. Detalles: CIERRE_ASISTENTE_MANUAL_V4_20261116.md.
+Los informes técnicos extensos quedaron en Liquidez → Datos avanzados; los criterios completos de entrada en Análisis → Ver evidencias. No hay recomendaciones de trading automáticas ni órdenes. Para límites y pruebas, leer CIERRE_VISUAL_V5_20261117.md.

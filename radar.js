@@ -147,7 +147,7 @@ function init(){
 }
 if(typeof module==='object'&&module.exports)module.exports={classifyCandles,buildSummary};
 if(root&&root.document){
- root.BTCManualRadar={refresh,shutdown};
+ root.BTCManualRadar={refresh,shutdown,snapshot:()=>new Map([...results].map(([k,v])=>[k,{...v}]))};
  if(root.document.readyState==='loading')root.document.addEventListener('DOMContentLoaded',init,{once:true});
  else init()
 }

@@ -79,7 +79,7 @@ test('HTML, scripts, cache are wired without removing original maps',()=>{
   assert.ok(html.includes('id="'+id+'"'),'missing '+id);
  }
  for(const asset of ['radar.js','planner.js','manual-assistant.css']){
-  assert.ok(html.includes(asset+'?v=v3-manual-20261116'));
+  assert.ok(html.includes(asset+'?v=v4-manual-20261116'));
   assert.ok(sw.includes("'./"+asset+"'"));
  }
  assert.ok(html.indexOf('app.js?v=')<html.indexOf('radar.js?v='));

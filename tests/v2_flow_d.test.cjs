@@ -2,7 +2,7 @@
 const fs=require('fs'),vm=require('vm'),path=require('path'),assert=require('node:assert/strict');
 const src=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
 const els=new Map(),ctx=new Proxy({createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}})},{get:(o,k)=>o[k]??(()=>{})});
-function el(id){if(!els.has(id))els.set(id,{textContent:'',innerHTML:'',className:'',parentElement:{getBoundingClientRect:()=>({width:390,height:240})},getContext:()=>ctx});return els.get(id)}
+function el(id){if(!els.has(id))els.set(id,{textContent:'',innerHTML:'',className:'',classList:{toggle(){}},parentElement:{getBoundingClientRect:()=>({width:390,height:240})},getContext:()=>ctx});return els.get(id)}
 const sandbox={document:{getElementById:el,hidden:false},window:{devicePixelRatio:1},console,Date,Math,Intl,devicePixelRatio:1,setTimeout,clearTimeout,setInterval,clearInterval};
 vm.createContext(sandbox);vm.runInContext(src.replace(/init\(\);\s*$/,''),sandbox);
 const run=x=>vm.runInContext(x,sandbox);let tests=0;

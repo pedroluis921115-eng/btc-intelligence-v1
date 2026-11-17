@@ -2,7 +2,7 @@
 const fs=require('fs'),vm=require('vm'),path=require('path'),assert=require('assert');
 const src=fs.readFileSync(path.join(__dirname,'..','app.js'),'utf8');
 const els=new Map(),ctx=new Proxy({createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}})},{get:(o,k)=>o[k]??(()=>{})});
-function el(id){if(!els.has(id))els.set(id,{textContent:'',innerHTML:'',className:'',value:'',parentElement:{getBoundingClientRect:()=>({width:390,height:240})},getContext:()=>ctx,getBoundingClientRect:()=>({width:390,height:240})});return els.get(id)}
+function el(id){if(!els.has(id))els.set(id,{textContent:'',innerHTML:'',className:'',classList:{toggle(){}},value:'',parentElement:{getBoundingClientRect:()=>({width:390,height:240})},getContext:()=>ctx,getBoundingClientRect:()=>({width:390,height:240})});return els.get(id)}
 const sandbox={document:{getElementById:el,hidden:false},window:{devicePixelRatio:1},console,Math,Intl,devicePixelRatio:1,setTimeout,clearTimeout,setInterval,clearInterval};
 sandbox.clock=Date.now();
 sandbox.Date=class extends Date {static now(){return sandbox.clock}};

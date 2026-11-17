@@ -51,7 +51,7 @@ function init(){
  const money=n=>'US$'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
  const qty=n=>n.toLocaleString('en-US',{maximumFractionDigits:6});
  const result=(el,text)=>{el.textContent=text;el.setAttribute('aria-live','polite')};
- const invalidate=()=>{if(current?.ok){current=null;result(output,'Cambiaste un dato del plan: vuelve a calcular antes de usar estos importes.');result(management,'Plan anterior invalidado; calcula de nuevo.')}};
+ const invalidate=()=>{if(current?.ok){current=null;if(root)root.BTCManualPlanCurrent=null;result(output,'Cambiaste un dato del plan: vuelve a calcular antes de usar estos importes.');result(management,'Plan anterior invalidado; calcula de nuevo.')}};
  for(const id of ['manualSide','manualCapital','manualRiskPercent','manualLeverage','manualEntry','manualStop','manualTarget','manualFeeBps','manualSlippageBps']){
   const field=el(id);if(field){field.addEventListener('input',invalidate);field.addEventListener('change',invalidate)}
  }
@@ -66,7 +66,8 @@ function init(){
   current=planTrade({side:f('manualSide'),entry:f('manualEntry'),stop:f('manualStop'),
     target:f('manualTarget'),capital:f('manualCapital'),riskPercent:f('manualRiskPercent'),
     feeBps:f('manualFeeBps'),slippageBps:f('manualSlippageBps'),leverage:f('manualLeverage')});
-  if(!current.ok){result(output,current.reason);result(management,'Pendiente de plan válido.');return}
+  if(!current.ok){if(root)root.BTCManualPlanCurrent=null;result(output,current.reason);result(management,'Pendiente de plan válido.');return}
+  if(root)root.BTCManualPlanCurrent={...current};
   result(output,
    'Tamaño: '+qty(current.quantity)+' BTC · Exposición: '+money(current.notional)+
    ' · Margen estimado: '+money(current.margin)+

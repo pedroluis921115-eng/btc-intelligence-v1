@@ -26,3 +26,28 @@
 .manual-disclaimer{font-size:11px;color:#a5bad1;line-height:1.5;margin-top:10px}
 @media(min-width:700px){.manual-tfs{grid-template-columns:repeat(4,minmax(0,1fr))}.manual-ref-list{grid-template-columns:repeat(2,minmax(0,1fr))}.manual-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media(min-width:1050px){.wrap{max-width:1240px}.manual-tf-value{font-size:19px}.manual-radar{margin-top:16px}}
+
+/* V4: confluencias por evidencia y diario local, sin dependencias ni tareas residentes. */
+.manual-confluence-card{border-color:#47738a}
+.manual-confluence-card .manual-summary-title{font-size:16px;font-weight:800;color:#d8f3ff;line-height:1.45;margin-top:8px}
+.manual-confluence-checks{display:grid;grid-template-columns:1fr;gap:6px;margin:12px 0}
+.manual-confluence-check{font-size:12px;line-height:1.45;padding:8px 10px;background:#101f32;border:1px solid #36516a;border-radius:8px}
+.manual-confluence-check.ok{color:#b0e8cf;border-color:#306e57}
+.manual-confluence-check.missing{color:#d3c9b4}
+.manual-alert-toolbar{margin-top:10px;padding:10px;border:1px solid #29465d;border-radius:9px}
+.manual-alert-toolbar label{display:flex;align-items:center;gap:9px;font-size:12px;line-height:1.4;cursor:pointer}
+.manual-alert-toolbar input{width:17px;height:17px;flex-shrink:0;accent-color:#48a7bf}
+.manual-alert-item{font-size:11px;line-height:1.5;border-bottom:1px solid #2e4359;padding:9px 5px}
+.manual-journal-card{border-color:#3b5a70}
+.manual-journal-card textarea{width:100%;min-height:66px;resize:vertical;color:#f5fbff;background:#0b1828;border:1px solid #405773;border-radius:9px;padding:10px;font-family:inherit;font-size:13px}
+.manual-journal-top{margin:16px 0 8px}
+.manual-journal-top h3{color:#d8e9f8}
+.manual-journal-filter{font-size:11px;color:#bbcee4}
+.manual-journal-filter select{background:#162a40;color:#f4f9ff;border-radius:8px;padding:7px;border:1px solid #456079}
+.manual-journal-history{max-height:360px;overflow:auto;margin:12px 0;font-size:11px;color:#bacde3}
+.manual-journal-row{padding:11px;border-bottom:1px solid #2b405a;line-height:1.55;overflow-wrap:anywhere}
+.manual-journal-row-head{font-size:12px;color:#e4f3ff;font-weight:700;margin-bottom:3px}
+.manual-file-label{display:inline-block;cursor:pointer;padding:10px 12px;border-radius:8px;background:#1d425b;border:1px solid #4f809a;color:#f0fbff;font-size:12px;font-weight:700}
+#journalImport{position:absolute;width:1px;height:1px;opacity:0}
+#journalImport:focus-visible + *{outline:2px solid #7acbe3}
+@media(min-width:700px){.manual-confluence-checks{grid-template-columns:repeat(2,minmax(0,1fr))}}

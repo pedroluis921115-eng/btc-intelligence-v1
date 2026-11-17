@@ -30,6 +30,21 @@ async function check(browser,width,height){
   }));
   assert.equal(initial.tabs,3);assert.equal(initial.fund,true);
   assert.ok(initial.width<=initial.inner+1);
+  const cleaned=await page.evaluate(()=>{
+   const ids=['fold-06','fold-07','fold-08','fold-13'],
+      storage=document.getElementById('vsInternalDiagnostics'),
+      advanced=document.getElementById('vsAdvancedMarket');
+   return {storageHidden:storage?.hidden,
+    parked:ids.map(id=>!!storage?.querySelector('[data-fold-card="'+id+'"]')),
+    stillInAdvanced:ids.map(id=>!!advanced?.querySelector('[data-fold-card="'+id+'"]')),
+    liveIds:['walls','compareStatus','strongBidLevels','runtimeHealth'].map(id=>!!document.getElementById(id)),
+    advancedRemaining:advanced?.querySelectorAll('[data-fold-card]').length||0};
+  });
+  assert.equal(cleaned.storageHidden,true);
+  assert.ok(cleaned.parked.every(Boolean),'four legacy sections preserved for internal data compatibility');
+  assert.ok(cleaned.stillInAdvanced.every(x=>!x),'four legacy sections removed from visible UI');
+  assert.ok(cleaned.liveIds.every(Boolean),'sources and diagnostics ids preserved');
+  assert.ok(cleaned.advancedRemaining>0,'other potentially useful modules retained');
   await page.evaluate(()=>{
    const now=Date.now(),base=Math.floor(now/300000)*300000;
    state.price=90000;state.lastPriceAt=now;state.wsOk=true;

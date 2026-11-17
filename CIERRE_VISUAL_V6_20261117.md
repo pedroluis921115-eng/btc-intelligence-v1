@@ -25,3 +25,6 @@ Continuación de V5 y V4. Revisión enfocada en facilitar análisis 4H/1H/15M/5M
 - Prueba prolongada Android físico: HOLD del control V2 #39, no se inventa PASS.
 - No avisos con la aplicación cerrada. Diario local, sin sincronización.
 - Información importante muestra hechos de mercado; NO una agenda macro económica de IPC/Fed ni noticias externas.
+
+## Ajuste de utilidad visual tras capturas del usuario (17/11/2026)
+Los paneles «Órdenes grandes visibles» (fold-06), «Comparación Binance vs Bybit» (fold-07), «Bloqueos importantes» (fold-08) y «Vigencia y procedencia» (fold-13) se retiran de la interfaz visible. Permanecen intactos sus nodos de datos en contenedor oculto #vsInternalDiagnostics para respetar integridad de funciones, cálculo y controles de caducidad; no se desconectan fuentes ni se atribuye reducción de RAM sin medirla. El objetivo es eliminar ruido, no convertir muros próximos de pocos segundos en soportes o señales. Comprobar con tests de V6 y luego despliegue público.

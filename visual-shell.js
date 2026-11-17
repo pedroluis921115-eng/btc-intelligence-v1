@@ -71,6 +71,17 @@ function setup(){
  move(el('manualJournalPanel'),trade);
  // Los paneles tradicionales se conservan en un único cajón técnico.
  for(const node of original)if(node.parentElement===main)move(node,advanced);
+ // Cuatro vistas experimentales no aportan contexto operativo: ocultar sus paneles,
+ // sin borrar los nodos, desconectar fuentes ni alterar el cálculo subyacente.
+ const techStore=root.document.createElement('div');
+ techStore.id='vsInternalDiagnostics';
+ techStore.hidden=true;
+ techStore.setAttribute('aria-hidden','true');
+ layout.appendChild(techStore);
+ for(const id of ['fold-06','fold-07','fold-08','fold-13']){
+  const card=advanced.querySelector('[data-fold-card="'+id+'"]');
+  if(card){const details=card.querySelector('details.foldable');if(details)details.open=false;techStore.appendChild(card)}
+ }
  // Reducir dibujo de gráficos que el usuario no ha pedido mostrar.
  for(const details of advanced.querySelectorAll('details.foldable'))details.open=false;
  const previousMap=el('vsOriginalModel');

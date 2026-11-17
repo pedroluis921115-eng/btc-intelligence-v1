@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-11-17T20:54:54Z",
+  "source": "Nasdaq earnings dates + directly verified corporate investor releases",
+  "windowStart": "2026-11-17",
+  "windowEnd": "2026-12-01",
+  "scope": "Selected systemically relevant technology companies only; not an exhaustive earnings calendar",
+  "events": [
+    {
+      "id": "official-NVDA-2026-11-17",
+      "symbol": "NVDA",
+      "name": "NVIDIA",
+      "date": "2026-11-17",
+      "exactTime": "2026-11-17T21:20:00Z",
+      "followupTime": "2026-11-17T22:00:00Z",
+      "session": "after",
+      "tier": "CRITICO",
+      "officialConfirmed": true,
+      "source": "NVIDIA Investor Relations",
+      "sourceUrl": "https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Sets-Conference-Call-for-Third-Quarter-Financial-Results/",
+      "verifiedOn": "2026-10-28",
+      "disclaimer": "Publicación aproximadamente 18:20 BRT; conferencia 19:00 BRT"
+    }
+  ]
+}

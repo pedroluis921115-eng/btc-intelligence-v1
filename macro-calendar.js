@@ -14,13 +14,14 @@ const RULES=[
  {rx:/\bGDP.*Advance\b|\bGDP \(Advance/i,title:'PIB · PRELIMINAR',tier:'IMPORTANTE',reason:'Crecimiento económico · primera estimación'},
  {rx:/\bRetail Sales\b/i,title:'VENTAS MINORISTAS',tier:'IMPORTANTE',reason:'Consumo estadounidense y expectativas económicas'},
  {rx:/\bPPI\b|\bProducer Price Index\b/i,title:'PRECIOS DE PRODUCCIÓN',tier:'IMPORTANTE',reason:'Presiones de precios en productores'},
- {rx:/\bFOMC Minutes\b/i,title:'ACTAS DE LA FED',tier:'IMPORTANTE',reason:'Detalles del debate de política monetaria'},
- {rx:/\bISM.*(Manufacturing|Services|PMI)\b/i,title:'ACTIVIDAD · ISM',tier:'IMPORTANTE',reason:'Actividad económica y expectativas de crecimiento'}
+ {rx:/\bFOMC Minutes\b/i,title:'ACTAS DE LA FED',tier:'IMPORTANTE',allowMedium:true,reason:'Detalles del debate de política monetaria'},
+ {rx:/\bISM.*(Manufacturing|Services|PMI)\b/i,title:'ACTIVIDAD · ISM',tier:'IMPORTANTE',allowMedium:true,reason:'Actividad económica y expectativas de crecimiento'},
+ {rx:/\bIndustrial Production\b/i,title:'PRODUCCIÓN INDUSTRIAL',tier:'RELEVANTE',allowMedium:true,reason:'Actividad industrial estadounidense; puede afectar expectativas macro'}
 ];
 function classifyEvent(raw){
- if(!raw||raw.importance!=='high'||typeof raw.eventName!=='string')return null;
+ if(!raw||typeof raw.eventName!=='string')return null;
  const rule=RULES.find(x=>x.rx.test(raw.eventName));
- if(!rule)return null;
+ if(!rule||!(raw.importance==='high'||(rule.allowMedium&&['med','medium'].includes(raw.importance))))return null;
  const t=Date.parse(raw.scheduledAt||'');
  if(!Number.isFinite(t)||!/\d\d:\d\d/.test(raw.scheduledAt||''))return null;
  const unit=typeof raw.unit==='string'?raw.unit.slice(0,85):null;
@@ -36,10 +37,14 @@ function selectEvents(data,now=Date.now(),days=7){
  const updated=Date.parse(data.updatedAt||'');
  if(!Number.isFinite(updated)||updated>now+5*60000||now-updated>MAX_AGE)
   return {ok:false,reason:'Calendario sin actualización reciente; consultar fuente'};
+ // Mantener los eventos de HOY hasta las 23:59 de Curitiba, aunque ya se publicaron.
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(now));
+ const get=t=>Number(parts.find(x=>x.type===t).value);
+ const start=Date.UTC(get('year'),get('month')-1,get('day'),3);
  const seen=new Set(),items=[];
  for(const x of data.data){
   const e=classifyEvent(x);if(!e||seen.has(e.id))continue;seen.add(e.id);
-  if(e.time>=now-2*HOUR&&e.time<=now+days*DAY)items.push(e);
+  if(e.time>=start&&e.time<start+days*DAY)items.push(e);
  }
  items.sort((a,b)=>a.time-b.time||(a.tier==='CRÍTICO'?-1:1));
  return {ok:true,events:items,updated,coverage:days};
@@ -56,8 +61,8 @@ function eventState(e,now=Date.now()){
   if(dt<=24*HOUR)return {label:'EN '+Math.ceil(dt/HOUR)+' H',urgent:false};
   return {label:'EN '+Math.ceil(dt/DAY)+' DÍAS',urgent:false};
  }
- if(dt>=-2*HOUR)return {label:e.actual?'PUBLICADO':'HORA DE PUBLICACIÓN PASADA',urgent:!e.actual};
- return {label:'FINALIZADO',urgent:false};
+ if(e.actual)return {label:'PUBLICADO',urgent:false};
+ return {label:'HORARIO PASADO · SIN VALOR CONFIRMADO',urgent:false};
 }
 const el=id=>root?.document?.getElementById(id);
 let alive=true,loading=false,lastLoaded=0,latest=null,viewDays=7,error='',controller=null,lastAttempt=0;
@@ -77,10 +82,10 @@ function render(){
   return;
  }
  status.textContent='AGENDA ACTUALIZADA · '+(viewDays===7?'7 DÍAS':'14 DÍAS')+' · HORA DE CURITIBA';
- let list=data.events.filter(x=>x.time>=now-2*HOUR).slice(0,5);
+ let list=data.events.slice(0,6);
  if(!list.length){
   const upcoming=nextCritical(latest,now);
-  addText(holder,'div','vs-macro-empty','No hay eventos macro prioritarios confirmados en este periodo.');
+  addText(holder,'div','vs-macro-empty','Sin otros datos macroeconómicos prioritarios en este periodo.');
   if(upcoming.length){
    addText(holder,'div','vs-macro-next','Próximo: '+upcoming[0].title+' · '+dateFmt.format(upcoming[0].time));
   }

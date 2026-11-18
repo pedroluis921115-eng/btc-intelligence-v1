@@ -17,7 +17,7 @@ const sources=[
   if(!row)throw Error('Contrato no encontrado');
   return {btc:Number(row.oiCcy),ts:Number(row.ts),now};
  }}];
-const entries=new Map(),bases=new Map(),controllers=new Set();
+const entries=new Map(),controllers=new Set();
 let running=false,lastPoll=0,closed=false;
 function parseResponse(source,payload,now=Date.now()){
  let v;try{v=source.parse(payload,now)}catch{return {ok:false,reason:'Símbolo o respuesta inválidos'}}
@@ -35,14 +35,14 @@ function summary(values,now=Date.now()){
 function display(){
  const n=Date.now();
  for(const src of sources){
-  const item=entries.get(src.id),base=bases.get(src.id);
+  const item=entries.get(src.id);
   const qty=root.document?.getElementById('vsOi'+src.id+'Value');
   const change=root.document?.getElementById('vsOi'+src.id+'Change');
   const stamp=root.document?.getElementById('vsOi'+src.id+'Stamp');
   if(!qty||!change||!stamp)continue;
   const fresh=!!item?.ok&&n-item.receivedAt<=180000;
   qty.textContent=fresh?Math.round(item.btc).toLocaleString('en-US')+' BTC':'—';
-  change.textContent=fresh&&base>0?((item.btc/base-1)*100).toFixed(2)+'% desde abrir':'Sin variación disponible';
+  change.textContent=fresh?'Contratos abiertos observados':'Sin dato vigente';
   stamp.textContent=fresh?'Actualizado '+new Date(item.ts).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}):
    item?.reason||'Esperando fuente';
   qty.classList.toggle('vs-unavailable',!fresh);
@@ -65,7 +65,6 @@ async function fetchSource(s){
   if(closed)return;
   if(v.ok){
    entries.set(s.id,{...v,receivedAt:n});
-   if(!bases.has(s.id))bases.set(s.id,v.btc);
   }else entries.set(s.id,{...v,receivedAt:n});
  }catch(e){if(!closed)entries.set(s.id,{ok:false,reason:'No disponible: '+(e.name==='AbortError'?'tiempo agotado':'fuente inaccesible'),receivedAt:Date.now()})}
  finally{root.clearTimeout(timer);controllers.delete(ctl)}

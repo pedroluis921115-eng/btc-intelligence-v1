@@ -15,4 +15,6 @@ Windows: icono BTC Intelligence abre perfil Chrome independiente. La prueba del 
 
 No está demostrado que ningún gráfico, confluencia o evento prediga la dirección o rentabilidad de BTC. Valida fechas definitivas y no operes impulsivamente alrededor de datos muy importantes.
 
-Evidencia: CIERRE_EVENTOS_IMPORTANTES_V6_20261117.md, CIERRE_MACRO_V6_20261117.md y CIERRE_VISUAL_V6_20261117.md.
+**OI fácil:** Análisis une BTC, cambio del OI en velas cerradas de Bybit y flujo ejecutado 5m. Liquidez muestra 15m y 1h; Binance/Bybit/OKX conservan sus instantáneas, sin el inútil 0,00% desde abrir. El resumen viejo con alertas ruidosas permanece oculto.
+
+Evidencia: CIERRE_OI_FACIL_V6_20261117.md, CIERRE_EVENTOS_IMPORTANTES_V6_20261117.md, CIERRE_MACRO_V6_20261117.md y CIERRE_VISUAL_V6_20261117.md.

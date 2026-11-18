@@ -78,6 +78,8 @@ function setup(){
  techStore.hidden=true;
  techStore.setAttribute('aria-hidden','true');
  layout.appendChild(techStore);
+ // El resumen antiguo repite OI y destaca ruido L2. Se conserva oculto para compatibilidad.
+ move(el('topSnapshot'),techStore);
  for(const id of ['fold-06','fold-07','fold-08','fold-13']){
   const card=advanced.querySelector('[data-fold-card="'+id+'"]');
   if(card){const details=card.querySelector('details.foldable');if(details)details.open=false;techStore.appendChild(card)}

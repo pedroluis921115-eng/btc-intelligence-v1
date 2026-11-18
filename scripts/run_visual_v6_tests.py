@@ -4,6 +4,9 @@ root=Path(__file__).resolve().parents[1]
 tests=[
  ['node','--check','visual-shell.js'],
  ['node','--check','multi-oi.js'],
+ ['node','--check','oi-easy.js'],
+ ['node','tests/oi_easy_v6.test.cjs'],
+ ['node','tests/oi_easy_browser_live.cjs'],
  ['node','--check','liquidation-visual.js'],
  ['node','--check','market-insights.js'],
  ['node','--check','macro-calendar.js'],

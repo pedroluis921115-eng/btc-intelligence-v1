@@ -19,7 +19,10 @@ Continuar V6 sin reiniciar ni añadir fuentes/indicadores. El usuario necesita m
 - Prueba local Chromium en 390x844 y 1280x800: ausencia de overflow, se puede expandir calendario y totales, no se pierde mapa ni 15m/1h; sin errores JavaScript. Advertencia urgente comprobada visible fuera del desplegable.
 - Nueva caché: 7 peticiones reutilizadas en sesión de prueba, 0 errores en prueba; 6 llamadas kline y 5 open-interest a Bybit en esa muestra. Antes se habían contado 10 kline y 7 OI, pero la ventana de observación no fue idéntica; no atribuir un porcentaje de reducción causal exacto sin benchmark controlado.
 - Memoria heap del navegador headless en muestra ≈2,8–3,3 MB; NO equivale a RAM total de Chrome/Windows y NO prueba consumo del Android.
-- Pruebas: suite scripts/run_visual_v6_tests.py con validación V6.1, módulos históricos, planificador, paper/real, mapas, calendarios, OI, fuentes y compatibilidad. No se declaran resultados hasta cierre del último PASS.
+- **Regresión V6.1 final:** scripts/run_visual_v6_tests.py = **33/33 grupos PASS, cero fallos**; incluye V2–V6, caché, interfaz móvil 390 y laptop 1280, calendario plegado, urgencias visibles, riesgo, parciales, diario y fuentes OI.
+- **GitHub Pages publicado:** scripts/verify-deploy.mjs = PUBLICATION_PASS v61-clean-20261117 (39 controles verdes, 1 Android físico prolongado HOLD heredado).
+- **Navegador público adicional:** web real de GitHub Pages a 390px, título V6 estable y nueva experiencia V6.1: ~1.321px de alto, sin desbordamiento ni errores JS; precio en vivo y OI Bybit 15m vigentes, agenda macro/corporativa actualizada, modelo OI visual y suma de Binance/Bybit/OKX real tras finalizar carga; calculadora y diario presentes. Sin falsos valores ante demora de API.
+- Caché reutilizó **7 lecturas** en la prueba pública y realizó 14 consultas REST Bybit desde el gestor compartido en ese ciclo; no se atribuyen ganancias de memoria global sin medición de navegador físico.
 
 ## Riesgos y pendientes
 - La franja de liquidaciones OI sigue siendo una estimación, no el mapa verdadero de CoinGlass ni un historial real de posición.

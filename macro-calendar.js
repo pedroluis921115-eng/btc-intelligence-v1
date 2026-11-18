@@ -93,7 +93,7 @@ function render(){
  }else{
   for(const e of list){
    const t=eventState(e,now),row=root.document.createElement('article');
-   row.className='vs-macro-event';row.dataset.tier=e.tier;row.dataset.urgent=String(t.urgent);
+   row.className='vs-macro-event';row.dataset.tier=e.tier;row.dataset.urgent=String(t.urgent);row.dataset.eventAt=String(e.time);
    const top=root.document.createElement('div');top.className='vs-macro-row';
    addText(top,'span','vs-macro-tier',e.tier);
    addText(top,'strong','vs-macro-title',e.title);

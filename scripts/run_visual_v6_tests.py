@@ -3,6 +3,9 @@ import subprocess,sys
 root=Path(__file__).resolve().parents[1]
 tests=[
  ['node','--check','visual-shell.js'],
+ ['node','--check','market-cache.js'],
+ ['node','tests/v61_shared_cache.test.cjs'],
+ ['node','tests/v61_cleanup_browser.cjs'],
  ['node','--check','multi-oi.js'],
  ['node','--check','oi-easy.js'],
  ['node','tests/oi_easy_v6.test.cjs'],
@@ -38,7 +41,7 @@ for cmd in tests:
  print('RUN',' '.join(cmd),flush=True)
  try:
   p=subprocess.run(cmd,cwd=root,encoding='utf-8',errors='replace',text=True,capture_output=True,timeout=65)
-  for line in (p.stdout+p.stderr).splitlines()[-4:]:print(' ',line[:250],flush=True)
+  for line in (p.stdout+p.stderr).splitlines()[-4:]:print(' ',line[:250].encode('ascii','replace').decode('ascii'),flush=True)
   if p.returncode:fail.append((' '.join(cmd),p.returncode))
   else:print('  PASS',flush=True)
  except subprocess.TimeoutExpired:fail.append((' '.join(cmd),'TIMEOUT'));print('  TIMEOUT',flush=True)

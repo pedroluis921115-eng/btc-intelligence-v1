@@ -38,6 +38,7 @@ async function check(browser,width,height){
    return document.querySelector('#vsCorporateEvents .vs-corporate-card')&&
       document.getElementById('vsMacroStatus')?.textContent.includes('AGENDA ACTUALIZADA');
   },{timeout:10000});
+  await page.$eval('#vsMacroDetails',el=>el.open=true); // V6.1: expand weekly agenda to verify full details.
   const initial=await page.evaluate(()=>({
     corp:document.getElementById('vsCorporateEvents').textContent,
     corpCount:document.querySelectorAll('#vsCorporateEvents .vs-corporate-card').length,

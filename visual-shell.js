@@ -39,6 +39,7 @@ function render(){
  set('vsFlow',snapshot?.flow?.valid?snapshot.flow.value:'SIN DATOS');
  set('vsOi',snapshot?.oi?.valid?snapshot.oi.value:'SIN DATOS');
  set('vsFunding',snapshot?.funding?.valid?snapshot.funding.value:'SIN DATOS');
+ set('vsFundingTrade',snapshot?.funding?.valid?snapshot.funding.value:'SIN DATOS');
  set('vsClock',pxOk?'PRECIO VIGENTE':'SIN PRECIO VIGENTE');
 }
 function switchView(next){
@@ -49,9 +50,44 @@ function switchView(next){
   const btn=root.document.querySelector('[data-vs-view="'+name+'"]');
   if(btn){btn.setAttribute('aria-selected',String(name===next));btn.classList.toggle('active',name===next)}
  }
- if(next==='analysis')render();
+ if(next==='analysis'||next==='trade')render();
  root.document.dispatchEvent(new CustomEvent('btc:viewchange',{detail:{view:next}}));
  root.scrollTo?.({top:0,behavior:'instant'});
+}
+function setupWeeklySpotlight(){
+ const target=el('vsMacroSpotlight'),corp=el('vsCorporateEvents'),macro=el('vsMacroEvents');
+ if(!target||!corp||!macro||typeof MutationObserver==='undefined')return;
+ const isoDate=ts=>{
+  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/Sao_Paulo',
+   year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(ts));
+  const find=k=>parts.find(x=>x.type===k)?.value||'';
+  return find('year')+'-'+find('month')+'-'+find('day');
+ };
+ const renderHeadline=()=>{
+  if(!alive)return;
+  const today=isoDate(Date.now()),events=[];
+  for(const node of [...corp.querySelectorAll('.vs-corporate-card'),...macro.querySelectorAll('.vs-macro-event')]){
+   const when=Number(node.dataset.eventAt),day=node.dataset.eventDay||(when>0?isoDate(when):'');
+   if(!day||day<today)continue;
+   const title=node.querySelector('.vs-macro-title')?.textContent?.trim();
+   if(!title)continue;
+   events.push({day,title,stamp:node.querySelector('.vs-macro-clock')?.textContent||''});
+  }
+  events.sort((a,b)=>a.day.localeCompare(b.day));
+  const warnings=[el('vsCorporateWarn'),el('vsMacroWarn')]
+   .filter(x=>x&&!x.hidden).map(x=>x.textContent.trim());
+  const text=warnings.length?'ATENCIÓN: '+warnings[0]:
+   events.length?events.slice(0,2).map(x=>x.title+' · '+x.stamp).join(' | '):
+   'Verifica los eventos de la semana en el calendario';
+  if(target.textContent!==text)target.textContent=text;
+  target.dataset.urgent=warnings.length?'true':'false';
+ };
+ const observer=new MutationObserver(renderHeadline);
+ observer.observe(corp,{childList:true});
+ observer.observe(macro,{childList:true});
+ for(const id of ['vsCorporateWarn','vsMacroWarn']){const w=el(id);if(w)observer.observe(w,{attributes:true,attributeFilter:['hidden'],childList:true,subtree:true,characterData:true})}
+ root.addEventListener('pagehide',()=>observer.disconnect(),{once:true});
+ renderHeadline();
 }
 function setup(){
  const main=root.document.querySelector('main.wrap'),layout=el('vsRoot');
@@ -80,6 +116,10 @@ function setup(){
  layout.appendChild(techStore);
  // El resumen antiguo repite OI y destaca ruido L2. Se conserva oculto para compatibilidad.
  move(el('topSnapshot'),techStore);
+ move(el('vsLegacyMarket'),techStore);
+ // Estructura y zonas al comienzo, antes del análisis de OI.
+ analysis.insertBefore(el('vsTrendPanel'),el('vsOiUnderstanding'));
+ analysis.insertBefore(el('vsZonesPanel'),el('vsOiUnderstanding'));
  for(const id of ['fold-06','fold-07','fold-08','fold-13']){
   const card=advanced.querySelector('[data-fold-card="'+id+'"]');
   if(card){const details=card.querySelector('details.foldable');if(details)details.open=false;techStore.appendChild(card)}
@@ -90,12 +130,13 @@ function setup(){
  if(previousMap)previousMap.addEventListener('toggle',()=>{if(previousMap.open&&typeof draw==='function')draw()});
  for(const details of trade.querySelectorAll('details.foldable'))details.open=false;
  // No cerramos el mapa principal, ni activamos servicios adicionales.
+ setupWeeklySpotlight();
  const brand=root.document.querySelector('header .brand .pill');if(brand)brand.textContent='V6';
  root.document.title='BTC Intelligence V6';
  for(const b of layout.querySelectorAll('[data-vs-view]'))b.addEventListener('click',()=>switchView(b.dataset.vsView));
  for(const b of layout.querySelectorAll('[data-vs-go]'))b.addEventListener('click',()=>switchView(b.dataset.vsGo));
  render();
- root.setInterval(()=>{if(alive&&view==='analysis'&&!root.document.hidden)render()},12000);
+ root.setInterval(()=>{if(alive&&(view==='analysis'||view==='trade')&&!root.document.hidden)render()},12000);
  root.document.addEventListener('visibilitychange',()=>{if(!root.document.hidden&&view==='analysis')render()});
  root.addEventListener('pagehide',()=>{alive=false},{once:true});
 }

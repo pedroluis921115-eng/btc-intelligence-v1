@@ -25,13 +25,6 @@ function pickImportant(input,now=Date.now()){
    value:'$'+Math.round(nearest.level).toLocaleString('en-US'),
    detail:(nearest.side==='short'?'Arriba · ':'Abajo · ')+(100*Math.abs(nearest.level/price-1)).toFixed(2)+'% · NO son liquidaciones observadas'});
  }
- if(oi?.valid&&Number.isFinite(oi.pricePct)&&Number.isFinite(oi.oiPct)&&
-   Math.abs(oi.pricePct)>=.15&&Math.abs(oi.oiPct)>=.1){
-  const opposite=Math.sign(oi.pricePct)!==Math.sign(oi.oiPct);
-  items.push({kind:opposite?'caution':'oi',title:opposite?'Precio y OI divergen':'Precio y OI se mueven juntos',
-   value:'OI '+(oi.oiPct>=0?'+':'')+oi.oiPct.toFixed(2)+'%',
-   detail:'BTC '+(oi.pricePct>=0?'+':'')+oi.pricePct.toFixed(2)+'% · vela cerrada Bybit; no determina dirección futura'});
- }
  const flowPct=Number(flow?.buyPct);
  if(flow?.valid&&Number.isFinite(flowPct)&&(flowPct>=65||flowPct<=35)){
   const buy=flowPct>=65;
@@ -39,18 +32,9 @@ function pickImportant(input,now=Date.now()){
    value:(buy?'Compras ':'Ventas ')+Math.round(buy?flowPct:100-flowPct)+'%',
    detail:'Bybit · operaciones ejecutadas; no predice el siguiente movimiento'});
  }
- if(confluence?.ready){
-  items.push({kind:'confirm',title:'Confluencia descriptiva',
-   value:'REVISAR '+confluence.side,
-   detail:'Condiciones observadas; verifica stop y costes. No es una señal validada.'});
- }
- if(!items.length&&funding?.valid){
-  items.push({kind:'funding',title:'Funding indicativo · Bybit',value:funding.value,
-   detail:'Coste potencial de mantener futuros; depende de tu lado y del momento del pago'});
- }
  if(!items.length)items.push({kind:'neutral',title:'Sin eventos destacados',value:'MERCADO EN OBSERVACIÓN',
   detail:'Sin hechos nuevos verificables con estos filtros · no implica que sea seguro operar'});
- return items.slice(0,3);
+ return items.slice(0,2);
 }
 function current(){
  const n=Date.now(),s=typeof state==='undefined'?null:state,raw=typeof topSnapshot==='function'?topSnapshot(n):{};
@@ -76,7 +60,9 @@ function render(){
   }
   container.appendChild(node);
  }
- const count=$('vsImportantCount');if(count)count.textContent=items[0]?.kind==='neutral'?'SIN CAMBIOS DESTACADOS':items.length+' DATOS ACTUALES';
+ const count=$('vsImportantCount');if(count)count.textContent=items[0]?.kind==='neutral'?'SIN CAMBIOS DESTACADOS':items.length+' HECHOS DESTACADOS';
+ const section=container.closest('.vs-important-panel');
+ if(section)section.hidden=items[0]?.kind==='neutral';
 }
 function init(){
  if(!$('vsImportantList'))return;

@@ -36,7 +36,7 @@ function interpret(pair){
  if(!pair?.ok)return {headline:'SIN COMPARACIÓN',explain:'Esperando BTC y OI del mismo periodo cerrado.',tone:'neutral'};
  const {oiPct,pricePct}=pair;
  const oiMove=Math.abs(oiPct)>=.2,priceMove=Math.abs(pricePct)>=.2;
- if(!oiMove)return {headline:'PARTICIPACIÓN ESTABLE',explain:'El OI cambió poco. No permite concluir quién domina.',tone:'neutral'};
+ if(!oiMove)return {headline:'PARTICIPACIÓN ESTABLE',explain:'Cambio de OI inferior al 0,20% (umbral orientativo). No indica dirección.',tone:'neutral'};
  if(!priceMove)return {headline:oiPct>0?'ENTRAN POSICIONES':'SE CIERRAN POSICIONES',
   explain:'El OI cambió, pero el precio apenas se movió.',tone:'neutral'};
  if(oiPct>0)return {headline:pricePct>0?'BTC SUBE + OI SUBE':'BTC BAJA + OI SUBE',
@@ -60,7 +60,7 @@ function render(){
   numeric('vsOiPercent'+key,p?pct(p.oiPct):'—');
   numeric('vsOiPrice'+key,p?pct(p.pricePct):'—');
   numeric('vsOiMeaning'+key,result.explain);
-  const el=byId('vsOiExplain'+key);if(el)el.dataset.tone=result.tone;
+  const el=byId('vsOiExplain'+key);if(el)el.dataset.tone='neutral';
  }
  const primary=p60&&(!p15||(Math.abs(p15.oiPct)<.2&&Math.abs(p60.oiPct)>=.2))?p60:p15;
  const result=interpret(primary);
@@ -78,12 +78,16 @@ async function fetchPair(c){
  const ctl=new AbortController();controllers.add(ctl);
  const timer=root.setTimeout(()=>ctl.abort(),9000);
  try{
-  const [oiResponse,kResponse]=await Promise.all([
-   fetch('https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime='+c.interval+'&limit=10',{signal:ctl.signal,cache:'no-store'}),
-   fetch('https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval='+c.candle+'&limit=10',{signal:ctl.signal,cache:'no-store'})
+  const read=async url=>{
+   if(root.BTCMarketCache)return root.BTCMarketCache.get(url);
+   const response=await fetch(url,{signal:ctl.signal,cache:'no-store'});
+   if(!response.ok)throw Error('Fuente no disponible');
+   return response.json();
+  };
+  const [oi,k]=await Promise.all([
+   read('https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime='+c.interval+'&limit=10'),
+   read('https://api.bybit.com/v5/market/kline?category=linear&symbol=BTCUSDT&interval='+c.candle+'&limit=10')
   ]);
-  if(!oiResponse.ok||!kResponse.ok)throw Error('Fuente no disponible');
-  const [oi,k]=await Promise.all([oiResponse.json(),kResponse.json()]);
   if(oi.retCode!==0||k.retCode!==0)throw Error('Datos incompletos');
   if(closed)return;
   cache.set(c.key,analyzePair(oi.result?.list,k.result?.list,c.period,Date.now()));

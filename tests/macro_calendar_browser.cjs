@@ -36,6 +36,7 @@ async function check(browser,width,height,stale){
   await page.goto('http://127.0.0.1:'+server.address().port+'/',{waitUntil:'domcontentloaded',timeout:16000});
   await page.waitForFunction(()=>document.getElementById('vsMacroStatus')?.textContent.includes('AGENDA ACTUALIZADA')||
    document.getElementById('vsMacroStatus')?.textContent.includes('Calendario desactualizado'),{timeout:8000});
+  await page.$eval('#vsMacroDetails',el=>el.open=true); // V6.1: weekly agenda is collapsed by design.
   const initial=await page.evaluate(()=>({
    count:document.querySelectorAll('#vsMacroEvents .vs-macro-event').length,
    status:document.getElementById('vsMacroStatus').textContent,

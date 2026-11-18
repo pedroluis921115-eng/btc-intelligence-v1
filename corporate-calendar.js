@@ -122,7 +122,7 @@ function render(){
  status.textContent='EMPRESAS · '+selected.events.length+' EVENTO(S) · '+sourceLabel+' · horas solo si están confirmadas';
  for(const e of selected.events){
   const card=root.document.createElement('article');
-  card.className='vs-macro-event vs-corporate-card';card.dataset.tier=e.tier;
+  card.className='vs-macro-event vs-corporate-card';card.dataset.tier=e.tier;card.dataset.eventDay=e.date;card.dataset.eventAt=e.official?String(e.scheduled):'';
   const state=companyStatus(e,now);card.dataset.urgent=String(state.urgent);
   const top=root.document.createElement('div');top.className='vs-macro-row';
   const label=root.document.createElement('span');label.className='vs-macro-tier';label.textContent=e.tier;top.appendChild(label);

@@ -1577,11 +1577,11 @@ function refreshConnectionLabels(now=Date.now()){
  }
  set('binanceStatus',f.binanceBook?'Conectado · libro vigente':
   f.binance?'Suscrito · esperando libro':'Sin conexión · esperando recuperación',f.binanceBook);
- const header=f.trade&&f.book?'EN VIVO':
-  f.trade||f.book?'DATOS PARCIALES':
+ const header=f.trade?'PRECIO EN VIVO':
+  f.book?'SIN PRECIO · LIBRO VIGENTE':
   f.bybit?'CONECTANDO...':'SIN CONEXIÓN';
- set('connection',header,f.trade&&f.book);
- $('connection').className='pill '+(f.trade&&f.book?'good':'warn');
+ set('connection',header,f.trade);
+ $('connection').className='pill '+(f.trade?'good':'warn');
  return f
 }
 
@@ -1615,7 +1615,7 @@ function monitorStreams(now=Date.now()){
   $('binanceStatus').textContent='Libro detenido · reconectando';
   try{bw.close()}catch{}
  }else if(!bw||bw.readyState===3){
-  if(!state.binanceReconn)state.binanceReconn=setTimeout(()=>{
+  if(binanceDepthOptIn()&&!state.binanceReconn)state.binanceReconn=setTimeout(()=>{
    state.binanceReconn=null;connectBinance()
   },6000)
  }
@@ -1630,6 +1630,7 @@ function onBinanceBook(msg,now=Date.now()){
  if(now-state.lastCompareAt>1000){state.lastCompareAt=now;renderExchangeComparison(now)}
 }
 
+function binanceDepthOptIn(){return typeof location!=='undefined'&&new URLSearchParams(location.search).get('debugBinanceL2')==='1'}
 function connectBinance(){
  if(state.binanceWs&&(state.binanceWs.readyState===0||state.binanceWs.readyState===1))return;
  if(state.binanceReconn){clearTimeout(state.binanceReconn);state.binanceReconn=null}
@@ -1855,7 +1856,7 @@ function connectBybit(){
   if(state.ws===ws&&ws.readyState===1)try{ws.send(JSON.stringify({op:'ping'}))}catch{}
  },20000)
 }
-async function req(url){let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
+async function req(url){if(typeof BTCMarketCache!=='undefined'&&url.startsWith('https://api.bybit.com/v5/market/'))return BTCMarketCache.get(url);let ctl=new AbortController(),timeout=setTimeout(()=>ctl.abort(),8000);try{let r=await fetch(url,{signal:ctl.signal,cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timeout)}}
 async function getOi(){// Public sources, no credentials, no simulated fallback.
 const providers=[{name:'Bybit',url:'https://api.bybit.com/v5/market/open-interest?category=linear&symbol=BTCUSDT&intervalTime=5min&limit=1',parse:d=>{if(d.retCode!==0)throw Error('Bybit '+d.retMsg);return asNum(d.result?.list?.[0]?.openInterest)}},{name:'Binance',url:'https://fapi.binance.com/fapi/v1/openInterest?symbol=BTCUSDT',parse:d=>asNum(d.openInterest)}];for(let p of providers){try{let d=await req(p.url),v=p.parse(d);if(v>0){if(state.oiSource!==p.name){state.oiFirst=0}state.oi=v;state.oiSource=p.name;if(!state.oiFirst)state.oiFirst=v;state.lastOiAt=Date.now();$('oi').textContent=cash(v)+' BTC';$('oiSource').textContent=p.name;$('oiStamp').textContent=p.name+' REST BTCUSDT · consultado '+dateTime(state.lastOiAt)+' · OI en BTC';$('oiDelta').textContent=pct((v/state.oiFirst-1)*100);state.restOk=true;status('restStatus','OI: '+p.name,true);if(state.lastHistoryAt)model();return}}catch(err){console.warn('OI '+p.name,err.message)}}status('restStatus','Open Interest no disponible',false);if(Date.now()-state.lastOiAt>120000){state.oi=0;$('oi').textContent='—';$('oiDelta').textContent='—';model()}}
 async function getCandles(){const tf=state.tf,request=++state.candlesRequest;
@@ -2113,12 +2114,12 @@ async function getHourlySentiment(){
   }else $('hourlySentimentStamp').textContent='Última lectura '+dateTime(end)+' · no se pudo refrescar';
  }finally{state.hourlyInFlight=false;renderSourceFreshness()}
 }
-function init(){initFolds();tabs();restore();renderTopSnapshot(Date.now(),true);$('apply').addEventListener('click',apply);connectBybit();connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(()=>safeVisibleCall(getOiSeries),60000);setInterval(()=>safeVisibleCall(getAccountRatio),60000);setInterval(()=>safeVisibleCall(getFunding),120000);setInterval(()=>safeVisibleCall(getOfficialFearGreed),3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(()=>safeVisibleCall(getHistory),300000);setInterval(()=>safeVisibleCall(getOi),60000);setInterval(()=>safeVisibleCall(getCandles),60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();monitorStreams(now);if(document.hidden)return;$('clock').textContent='Ahora '+time(now);refreshConnectionLabels(now);renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);renderTopSnapshot(now);renderRuntimeHealth(now);
+function init(){initFolds();tabs();restore();renderTopSnapshot(Date.now(),true);$('apply').addEventListener('click',apply);connectBybit();if(binanceDepthOptIn())connectBinance();getOfficialFearGreed();getHourlySentiment();getOi();getCandles();getHistory();getOiSeries();getAccountRatio();getFunding();renderSourceFreshness();setInterval(()=>safeVisibleCall(getOiSeries),60000);setInterval(()=>safeVisibleCall(getAccountRatio),60000);setInterval(()=>safeVisibleCall(getFunding),120000);setInterval(()=>safeVisibleCall(getOfficialFearGreed),3600000);setInterval(()=>{if(!document.hidden)getHourlySentiment()},60000);setInterval(()=>safeVisibleCall(getHistory),300000);setInterval(()=>safeVisibleCall(getOi),60000);setInterval(()=>safeVisibleCall(getCandles),60000);setInterval(captureLiquidityHeat,HEAT_SAMPLE_MS);setInterval(()=>{let now=Date.now();monitorStreams(now);if(document.hidden)return;$('clock').textContent='Ahora '+time(now);refreshConnectionLabels(now);renderBook();renderExchangeComparison(now);renderWallInsights(now);checkBreakouts(now);renderBreakouts(now);evaluateAbsorption(now);renderAdvancedWhales(now);renderLiq(now);renderMarketSummary(now);renderSourceFreshness(now);renderTopSnapshot(now);renderRuntimeHealth(now);
  if(state.alertAgeMinute!==Math.floor(now/60000)){state.alertAgeMinute=Math.floor(now/60000);renderAlerts(now,true)}if(now-state.lastPriceAt>60000){$('lastTick').textContent='Precio no actualizado · última operación '+(state.lastPriceAt?time(state.lastPriceAt):'—')}renderTrades()},5000);window.addEventListener('resize',()=>{draw();drawOiSeries();drawLiquidityHeat()});document.addEventListener('visibilitychange',()=>{if(!document.hidden){
    monitorStreams();
    if(!state.ws||state.ws.readyState===3)connectBybit();
    getHourlySentiment();getOfficialFearGreed();getOi();getCandles();
-   if(!state.binanceWs||state.binanceWs.readyState===3)connectBinance();
+   if(binanceDepthOptIn()&&(!state.binanceWs||state.binanceWs.readyState===3))connectBinance();
    getAccountRatio();getFunding();getOiSeries();drawLiquidityHeat();
    if(state.ws&&state.ws.readyState===1)try{state.ws.send(JSON.stringify({op:'ping'}))}catch{}
   }});if('serviceWorker'in navigator)navigator.serviceWorker.register('./sw.js').catch(()=>{})}init();

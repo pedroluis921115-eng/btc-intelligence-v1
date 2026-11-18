@@ -17,4 +17,6 @@ No está demostrado que ningún gráfico, confluencia o evento prediga la direcc
 
 **OI fácil:** Análisis une BTC, cambio del OI en velas cerradas de Bybit y flujo ejecutado 5m. Liquidez muestra 15m y 1h; Binance/Bybit/OKX conservan sus instantáneas, sin el inútil 0,00% desde abrir. El resumen viejo con alertas ruidosas permanece oculto.
 
-Evidencia: CIERRE_OI_FACIL_V6_20261117.md, CIERRE_EVENTOS_IMPORTANTES_V6_20261117.md, CIERRE_MACRO_V6_20261117.md y CIERRE_VISUAL_V6_20261117.md.
+**Limpieza V6.1:** Análisis prioriza tendencia, zonas, BTC+OI+flujo y resumen compacto de calendario. Los totales de exchanges y los eventos completos se pueden desplegar. El funding se consulta en OPERACIÓN. Sin libro Binance L2 en la conexión normal; sigue disponible únicamente para diagnóstico explícito. Caché pública compartida de Bybit de 15 segundos, sin uso en trading real. No se agregaron indicadores.
+
+Evidencia: CIERRE_LIMPIEZA_V61_20261117.md, AUDITORIA_V6_EFICIENCIA_20261117.md y expedientes científicos previos.

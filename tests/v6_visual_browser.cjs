@@ -68,7 +68,8 @@ async function check(browser,width,height){
    text:document.getElementById('vsImportantList').textContent
   }));
   assert.ok(info.events>0&&info.events<=3);
-  assert.ok(info.text.includes('Funding')||info.text.includes('OI')||info.text.includes('Zona'));
+  assert.ok(info.text.includes('Sin eventos destacados')||info.text.includes('Zona')||info.text.includes('Presión'));
+  assert.ok(info.events<=2,'No repeat routine OI or funding as urgent alerts');
   await page.click('[data-vs-view="liquidity"]');
   await page.evaluate(()=>BTCLiqVisual.render());
   const chart=await page.evaluate(()=>{

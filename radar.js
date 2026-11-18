@@ -84,6 +84,7 @@ function render(){
  }
 }
 async function requestJSON(url,signal){
+ if(root.BTCMarketCache&&url.startsWith('https://api.bybit.com/v5/market/'))return root.BTCMarketCache.get(url);
  const r=await fetch(url,{cache:'no-store',signal});
  if(!r.ok)throw new Error('HTTP '+r.status);
  return r.json();

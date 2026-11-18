@@ -55,3 +55,38 @@
  .vs-root .vs-map-legend{gap:8px}
  .vs-root .vs-map-legend>span{font-size:10px}
 }
+
+
+/* V6.1 · recortar ruido. Mantener fuentes cargadas aun cuando los paneles estén plegados. */
+.vs-root .vs-week-fold,.vs-root .vs-venue-oi-details{
+ border:1px solid #365a75;border-radius:13px;background:#101e30;margin:0 0 12px;overflow:hidden}
+.vs-root .vs-week-fold>summary,.vs-root .vs-venue-oi-details>summary{
+ list-style:none;cursor:pointer;display:flex;flex-wrap:wrap;align-items:center;gap:7px;
+ min-height:64px;padding:11px 14px;font-size:12px;font-weight:850;color:#e2edf9}
+.vs-root .vs-week-fold>summary::-webkit-details-marker,
+.vs-root .vs-venue-oi-details>summary::-webkit-details-marker{display:none}
+.vs-root .vs-week-fold>summary:focus-visible,.vs-root .vs-venue-oi-details>summary:focus-visible{
+ outline:2px solid #81d8ee;outline-offset:-2px}
+.vs-root .vs-week-title{color:#e8f7ff;white-space:nowrap}
+.vs-root .vs-week-spotlight{color:#aad0df;font-size:11px;font-weight:600;line-height:1.4;flex:1;min-width:140px}
+.vs-root .vs-week-action,.vs-root .vs-venue-oi-details>summary span{
+ color:#95d9ee;font-size:10px;font-weight:850;white-space:nowrap}
+.vs-root .vs-week-fold[open] .vs-week-action{font-size:0}
+.vs-root .vs-week-fold[open] .vs-week-action::after{content:'OCULTAR';font-size:10px}
+.vs-root .vs-week-fold>.vs-macro-panel{border:0;border-top:1px solid #37546f;border-radius:0;background:#0b1829;margin:0}
+.vs-root .vs-venue-oi-details>.vs-card{border:0;border-top:1px solid #365a75;border-radius:0;margin:0}
+.vs-root .vs-funding-mini{border:1px solid #345269;border-radius:10px;padding:9px 12px;
+ margin:8px 0 12px;color:#a9cada;font-size:11px}
+.vs-root .vs-funding-mini strong{color:#d4eafa;font-size:12px}
+.vs-root .vs-important-panel[hidden],.vs-root .vs-pane[hidden]{display:none!important}
+.vs-root .vs-important-item{min-height:0;padding:11px 12px;gap:5px}
+.vs-root .vs-oi-pair-grid [data-tone="bull"],.vs-root .vs-oi-pair-grid [data-tone="bear"]{color:#eafaff}
+@media(max-width:700px){
+ .vs-root .vs-week-fold>summary{gap:5px;padding:10px 11px}
+ .vs-root .vs-week-title{font-size:11px}
+ .vs-root .vs-week-spotlight{order:3;flex-basis:100%;font-size:10px}
+ .vs-root .vs-week-action{margin-left:auto}
+ .vs-root .vs-macro-panel{padding:12px}
+}
+
+.vs-root .vs-week-spotlight[data-urgent='true']{color:#ffd79d;font-weight:900}

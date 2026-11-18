@@ -45,12 +45,12 @@ check('Facts do not produce a scenario without fresh BTC price',()=>{
  const r=pickImportant({price:90000,priceAt:now-40000},now);
  assert.equal(r[0].kind,'missing');
 });
-check('Near hypothetical OI is clearly labelled and capped to 3 cards',()=>{
+check('Important facts never repeat routine OI and cap at 2 cards',()=>{
  const frames={240:{ok:true,direction:'Alcista'},60:{ok:true,direction:'Bajista'}};
  const r=pickImportant({price:90000,priceAt:now-2000,frames,model:zones,modelAt:now-50000,
   flow:{valid:true,buyPct:20},oi:{valid:true,oiPct:.6,pricePct:-.3},
   funding:{valid:true,value:'+0.0020%'},confluence:{ready:true,side:'LONG'}},now);
- assert.ok(r.length<=3);assert.ok(r.some(x=>x.title.includes('divergen')));assert.ok(r.some(x=>x.kind==='caution'));
+ assert.ok(r.length<=2);assert.ok(!r.some(x=>x.title.includes('divergen')));assert.ok(r.some(x=>x.kind==='flow'));
  assert.ok(!r.some(x=>x.detail.includes('garantiza')));
 });
 check('No highlight from stale model',()=>{
@@ -61,8 +61,8 @@ check('Flow is explicitly not a forecast',()=>{
  const r=pickImportant({price:90000,priceAt:now-1000,flow:{valid:true,buyPct:72}},now);
  assert.equal(r[0].kind,'flow');assert.match(r[0].detail,/no predice/);
 });
-check('Funding fallback only if valid, not a news claim',()=>{
+check('Routine funding is not elevated into high-impact event',()=>{
  const r=pickImportant({price:90000,priceAt:now-1000,funding:{valid:true,value:'-0.0008%'}},now);
- assert.equal(r[0].kind,'funding');
+ assert.equal(r[0].kind,'neutral');
 });
 console.log('V6_FACTS_AND_MAP_PASS',passed);
